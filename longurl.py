@@ -24,8 +24,6 @@ script_name = os.path.basename(sys.argv[0])
 USAGE = "USAGE: $ "+script_name+" http://long.url/stuff"
 COLUMNS_DEFAULT = 80
 SCHEME_REGEX = r'^[^?#:]+://'
-PARENT_REGEX = r'^(.*/)[^/]*$'
-META_REFRESH_REGEX = r'^.+;\s*url=(.*)$'
 
 USER_AGENT = 'Mozilla/5.0 (Windows NT 6.1; Win64; x64; rv:25.0) Gecko/20100101 Firefox/25.0'
 ACCEPT = 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
@@ -62,26 +60,26 @@ def main():
   done = False
   while not done:
     print url
-    url_parsed = urlparse.urlparse(url)
+    url_parsed = urlparse.urlsplit(url)
     scheme = url_parsed[0]
     domain = url_parsed[1]
     path = url_parsed[2]
-    params = url_parsed[3]
     if not path:
       path = '/'
 
-    full_path = path
-    if params:
-      full_path += ';'+params
-    query = url_parsed[4]
+    query = url_parsed[3]
     if query:
-      full_path += '?'+query
+      path += '?'+query
 
-
-    conex = httplib.HTTPConnection(domain)
+    if scheme == 'http':
+      conex = httplib.HTTPConnection(domain)
+    elif scheme == 'https':
+      conex = httplib.HTTPSConnection(domain)
+    else:
+      fail("Error: Unrecognized URI scheme in:\n"+url)
 
     # Each of these steps can throw exceptions
-    conex.request('GET', full_path, '', HEADERS)
+    conex.request('GET', path, '', HEADERS)
     response = conex.getresponse()
     html = response.read()
 
@@ -100,23 +98,12 @@ def main():
         fail("Error: non-200 status and no Location header. Status message:\n\t"
           +str(response.status)+': '+response.reason)
     else:
-      # print "redirect to |"+location_url+"|"
-      if re.search(SCHEME_REGEX, location_url):
-        # It's a regular, full URL
-        url = location_url
-      elif location_url[0] == '/':
-        # Location omits scheme+domain but is an absolute URL
-        summary += "absolute path from "+url[:columns-19]+"\n"
-        url = scheme+'://'+domain+location_url
-      else:
-        # Location omits domain and is a relative URL
-        match = re.search(PARENT_REGEX, path)
-        if match:
-          path_parent = match.group(1)
+      if not quiet and not re.search(SCHEME_REGEX, location_url):
+        if location_url.startswith('/'):
+          summary += "absolute path from "+url[:columns-19]+"\n"
         else:
-          fail("Error matching m/"+PARENT_REGEX+"/ to "+path)
-        summary += "relative path from "+url[:columns-19]+"\n"
-        url = scheme+'://'+domain+path_parent+location_url
+          summary += "relative path from "+url[:columns-19]+"\n"
+      url = urlparse.urljoin(url, location_url)
 
     conex.close()
 
@@ -155,9 +142,9 @@ class RefreshParser(HTMLParser.HTMLParser):
       content = attrs_dict.get('content', '')
     else:
       return
-    match = re.search(META_REFRESH_REGEX, content, flags=re.IGNORECASE)
-    if match:
-      self.url = match.group(1)
+    url_index = content.lower().find('url=') + len('url=')
+    if url_index >= len('url='):
+      self.url = content[url_index:]
     else:
       return
 
