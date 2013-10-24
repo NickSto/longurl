@@ -21,7 +21,9 @@ import HTMLParser
 import distutils.spawn
 
 script_name = os.path.basename(sys.argv[0])
-USAGE = "USAGE: $ "+script_name+" http://long.url/stuff"
+USAGE = """USAGE: $ "+script_name+" http://long.url/stuff
+Url must be the first argument. Can omit the 'http://'.
+-q suppresses all output but the chain of URLs."""
 COLUMNS_DEFAULT = 80
 SCHEME_REGEX = r'^[^?#:]+://'
 
@@ -78,16 +80,15 @@ def main():
     else:
       fail("Error: Unrecognized URI scheme in:\n"+url)
 
-    # Each of these steps can throw exceptions
+    # Note: both of these steps can throw exceptions
     conex.request('GET', path, '', HEADERS)
     response = conex.getresponse()
-    html = response.read()
 
     location_url = response.getheader('Location')
 
     if location_url is None:
       if response.status == 200:
-        # html = response.read()
+        html = response.read()
         meta_url = meta_redirect(html)
         if meta_url:
           url = meta_url
@@ -131,8 +132,7 @@ class RefreshParser(HTMLParser.HTMLParser):
   def handle_starttag(self, tag, attrs):
     """Reminder of what we're looking for:
     <meta http-equiv="refresh" content="0;url=http://url.com" />
-    attrs = [('http-equiv', 'refresh'), ('content', '0;url=http://url.com')]
-    """
+    attrs = [('http-equiv', 'refresh'), ('content', '0;url=http://url.com')]"""
     refresh = False
     if tag == 'meta':
       attrs_dict = dict(attrs)
