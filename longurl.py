@@ -4,6 +4,7 @@
 # http://t.co/oZ2IWUfW9m - relatively sane - should end at gift-card-rewards.com
 # - update: oops, disabled!
 # http://bit.ly/1b5KFTr - 14 redirects! - should end at www.nextag.com
+# - oops, looks like it might've expired; only 7 redirects now.
 # http://bit.ly/1c9r7Bt - meta refresh - actually ends at www.toshiba.com
 # - Careful, they can detect you re-using urls partway through
 #   the chain (session ids) and give you a different redirect or a 500
@@ -19,38 +20,67 @@ import urlparse
 import subprocess
 import HTMLParser
 import distutils.spawn
+from optparse import OptionParser
 
-script_name = os.path.basename(sys.argv[0])
-USAGE = """USAGE: $ "+script_name+" http://long.url/stuff
-Url must be the first argument. Can omit the 'http://'.
--q suppresses all output but the chain of URLs."""
 COLUMNS_DEFAULT = 80
 SCHEME_REGEX = r'^[^?#:]+://'
 
-USER_AGENT = 'Mozilla/5.0 (Windows NT 6.1; Win64; x64; rv:25.0) Gecko/20100101 Firefox/25.0'
-ACCEPT = 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
-ACCEPT_LANG = 'en-US,en;q=0.5'
-ACCEPT_ENCOD = 'gzip, deflate'
-CONNECTION = 'keep-alive'
-# HEADERS = {'User-Agent':USER_AGENT, 'Accept':ACCEPT, 'Accept':ACCEPT,
+DEFAULTS = {'quiet':False, 'debug':False, 'custom_ua':False}
+USAGE = """Usage: %prog [options] http://sho.rt/url"""
+DESCRIPTION = """Follow the chain of redirects from the starting url. This
+will print the start url, then every redirect in the chain. Can omit the
+'http://' from the url argument."""
+EPILOG=""""""
+USER_AGENT_BROWSER = 'Mozilla/5.0 (Windows NT 6.1; Win64; x64; rv:25.0) Gecko/20100101 Firefox/25.0'
+USER_AGENT_CUSTOM = 'longurl.py'
+# Some of the headers in the full list can cause problems:
+# ACCEPT = 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+# ACCEPT_LANG = 'en-US,en;q=0.5'
+# ACCEPT_ENCOD = 'gzip, deflate'
+# CONNECTION = 'keep-alive'
+# headers = {'Accept':ACCEPT, 'Accept':ACCEPT,
 #   'Accept-Language':ACCEPT_LANG, 'Accept-Encoding':ACCEPT_ENCOD,
 #   'Connection':CONNECTION}
-# Some of the headers in the full list can cause problems
-HEADERS = {'User-Agent':USER_AGENT}
+headers = {}
+
+debug = False
+if '-d' in sys.argv or '--debug' in sys.argv:
+  debug = True
 
 def main():
-  if len(sys.argv) > 1:
-    url = sys.argv[1]
-  else:
-    print USAGE
-    exit()
-  if url == '-h' or url == '--help':
-    print USAGE
-    exit()
 
-  quiet = False
-  if '-q' in sys.argv:
-    quiet = True
+  parser = OptionParser(usage=USAGE, description=DESCRIPTION, epilog=EPILOG)
+
+  parser.add_option('-q', '--quiet', dest='quiet', action='store_const',
+    const=not(DEFAULTS.get('quiet')), default=DEFAULTS.get('quiet'),
+    help=('Suppress all output but the list of URLs. The number of output lines'
+      +' will be 1 + the number of redirects.'))
+  parser.add_option('-u', '--custom_ua', dest='custom_ua', action='store_const',
+    const=not(DEFAULTS.get('custom_ua')), default=DEFAULTS.get('custom_ua'),
+    help=("Use the script's own custom user agent. By default it mimics a "
+      +"browser user agent (Firefox), in order to get servers to treat it like "
+      +'any other "regular" user, but sometimes the effect can be worse than '
+      +'when they see an unrecognized UA. With this option, it will give the '
+      +'string "'+USER_AGENT_CUSTOM+'".'))
+  parser.add_option('-d', '--debug', dest='debug', action='store_const',
+    const=not(DEFAULTS.get('debug')), default=DEFAULTS.get('debug'),
+    help=('Turn on debug mode.'))
+
+  (options, arguments) = parser.parse_args()
+
+  if not arguments:
+    parser.print_help()
+    exit(1)
+  else:
+    url = arguments[0]
+
+  quiet = options.quiet
+
+  if options.custom_ua:
+    headers['User-Agent'] = USER_AGENT_CUSTOM
+  else:
+    headers['User-Agent'] = USER_AGENT_BROWSER
+
 
   columns = get_columns(COLUMNS_DEFAULT)
 
@@ -68,7 +98,6 @@ def main():
     path = url_parsed[2]
     if not path:
       path = '/'
-
     query = url_parsed[3]
     if query:
       path += '?'+query
@@ -79,9 +108,8 @@ def main():
       conex = httplib.HTTPSConnection(domain)
     else:
       fail("Error: Unrecognized URI scheme in:\n"+url)
-
     # Note: both of these steps can throw exceptions
-    conex.request('GET', path, '', HEADERS)
+    conex.request('GET', path, '', headers)
     response = conex.getresponse()
 
     location_url = response.getheader('Location')
@@ -91,8 +119,8 @@ def main():
         html = response.read()
         meta_url = meta_redirect(html)
         if meta_url:
-          url = meta_url
           summary += "meta refresh from  "+url[:columns-19]+"\n"
+          url = meta_url
         else:
           done = True
       else:
@@ -133,7 +161,6 @@ class RefreshParser(HTMLParser.HTMLParser):
     """Reminder of what we're looking for:
     <meta http-equiv="refresh" content="0;url=http://url.com" />
     attrs = [('http-equiv', 'refresh'), ('content', '0;url=http://url.com')]"""
-    refresh = False
     if tag == 'meta':
       attrs_dict = dict(attrs)
     else:
