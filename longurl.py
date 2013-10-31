@@ -43,9 +43,13 @@ USER_AGENT_CUSTOM = 'longurl.py'
 #   'Connection':CONNECTION}
 headers = {}
 
+# try to set debug as a global
 debug = False
-if '-d' in sys.argv or '--debug' in sys.argv:
+if '-d' in sys.argv[1:] or '--debug' in sys.argv[1:]:
   debug = True
+for opt in sys.argv[1:]:
+  if re.match(r'^-[a-zA-Z]*d', opt):
+    debug = True
 
 def main():
 
