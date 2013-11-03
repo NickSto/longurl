@@ -24,7 +24,7 @@ from optparse import OptionParser
 
 COLUMNS_DEFAULT = 80
 SCHEME_REGEX = r'^[^?#:]+://'
-MAX_RESPONSE_READ = 4096 # bytes
+MAX_RESPONSE_READ = 131072 # bytes
 
 DEFAULTS = {'quiet':False, 'debug':False, 'custom_ua':False}
 USAGE = """Usage: %prog [options] http://sho.rt/url"""
