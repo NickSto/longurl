@@ -24,6 +24,7 @@ from optparse import OptionParser
 
 COLUMNS_DEFAULT = 80
 SCHEME_REGEX = r'^[^?#:]+://'
+MAX_RESPONSE_READ = 4096 # bytes
 
 DEFAULTS = {'quiet':False, 'debug':False, 'custom_ua':False}
 USAGE = """Usage: %prog [options] http://sho.rt/url"""
@@ -120,7 +121,7 @@ def main():
 
     if location_url is None:
       if response.status == 200:
-        html = response.read()
+        html = response.read(MAX_RESPONSE_READ)
         meta_url = meta_redirect(html)
         if meta_url:
           summary += "meta refresh from  "+url[:columns-19]+"\n"
