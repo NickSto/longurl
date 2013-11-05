@@ -12,6 +12,9 @@
 # - via zdbb.net, who might be responsible for the blocking of the last one
 # http://bit.ly/1a9xteY - relative Location - ends at accessories.us.dell.com
 # - and the location doesn't start with a /
+# http://bit.ly/1iKbWfU
+# http://bit.ly/HtZ9lX
+# - both include a Location header with a space character
 import os
 import re
 import sys
@@ -24,7 +27,7 @@ from optparse import OptionParser
 
 COLUMNS_DEFAULT = 80
 SCHEME_REGEX = r'^[^?#:]+://'
-MAX_RESPONSE_READ = 131072 # bytes
+MAX_RESPONSE_READ = 128 * 1024 # in bytes
 
 DEFAULTS = {'quiet':False, 'debug':False, 'custom_ua':False}
 USAGE = """Usage: %prog [options] http://sho.rt/url"""
@@ -96,6 +99,10 @@ def main():
   redirects = 0
   done = False
   while not done:
+
+    #TODO: proper percent-encoding
+    url = re.sub(r' ', '%20', url)
+
     print url
     url_parsed = urlparse.urlsplit(url)
     scheme = url_parsed[0]
