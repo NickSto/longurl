@@ -15,6 +15,8 @@
 # http://bit.ly/1iKbWfU
 # http://bit.ly/HtZ9lX
 # - both include a Location header with a space character
+# http://bit.ly/1aYLVck - HTMLParser throws a UnicodeDecodeError
+# Bad byte in html of http://shop.lenovo.com/us/en/laptops/thinkpad/x-series/x1-carbon-touch/?cid=US:display:lDtDOc&dfaid=1
 import os
 import re
 import sys
@@ -27,9 +29,9 @@ from optparse import OptionParser
 
 COLUMNS_DEFAULT = 80
 SCHEME_REGEX = r'^[^?#:]+://'
-MAX_RESPONSE_READ = 128 * 1024 # in bytes
 
-DEFAULTS = {'quiet':False, 'debug':False, 'custom_ua':False}
+DEFAULTS = {'quiet':False, 'debug':False, 'custom_ua':False,
+  'max_response_read':128} # kilobytes
 USAGE = """Usage: %prog [options] http://sho.rt/url"""
 DESCRIPTION = """Follow the chain of redirects from the starting url. This
 will print the start url, then every redirect in the chain. Can omit the
@@ -61,18 +63,22 @@ def main():
 
   parser.add_option('-q', '--quiet', dest='quiet', action='store_const',
     const=not(DEFAULTS.get('quiet')), default=DEFAULTS.get('quiet'),
-    help=('Suppress all output but the list of URLs. The number of output lines'
-      +' will be 1 + the number of redirects.'))
+    help='Suppress all output but the list of URLs. The number of output lines '
+      +'will be 1 + the number of redirects.')
   parser.add_option('-u', '--custom_ua', dest='custom_ua', action='store_const',
     const=not(DEFAULTS.get('custom_ua')), default=DEFAULTS.get('custom_ua'),
-    help=("Use the script's own custom user agent. By default it mimics a "
+    help="Use the script's own custom user agent. By default it mimics a "
       +"browser user agent (Firefox), in order to get servers to treat it like "
       +'any other "regular" user, but sometimes the effect can be worse than '
       +'when they see an unrecognized UA. With this option, it will give the '
-      +'string "'+USER_AGENT_CUSTOM+'".'))
+      +'string "'+USER_AGENT_CUSTOM+'".')
+  parser.add_option('-m', '--max-response-read', dest='max_response_read',
+    type='int', default=DEFAULTS.get('max_response_read'),
+    help='Maximum amount of response to download, looking for meta refreshes '
+      +'in the HTML. Given in kilobytes. Default: %defaultkb.')
   parser.add_option('-d', '--debug', dest='debug', action='store_const',
     const=not(DEFAULTS.get('debug')), default=DEFAULTS.get('debug'),
-    help=('Turn on debug mode.'))
+    help='Turn on debug mode.')
 
   (options, arguments) = parser.parse_args()
 
@@ -81,8 +87,6 @@ def main():
     exit(1)
   else:
     url = arguments[0]
-
-  quiet = options.quiet
 
   if options.custom_ua:
     headers['User-Agent'] = USER_AGENT_CUSTOM
@@ -128,8 +132,11 @@ def main():
 
     if location_url is None:
       if response.status == 200:
-        html = response.read(MAX_RESPONSE_READ)
-        meta_url = meta_redirect(html)
+        html = response.read(options.max_response_read * 1024)
+        try:
+          meta_url = meta_redirect(html)
+        except Exception:
+          meta_url = None   # on error, proceed as if none was found
         if meta_url:
           summary += "meta refresh from  "+url[:columns-19]+"\n"
           url = meta_url
@@ -139,7 +146,7 @@ def main():
         fail("Error: non-200 status and no Location header. Status message:\n\t"
           +str(response.status)+': '+response.reason)
     else:
-      if not quiet and not re.search(SCHEME_REGEX, location_url):
+      if not options.quiet and not re.search(SCHEME_REGEX, location_url):
         if location_url.startswith('/'):
           summary += "absolute path from "+url[:columns-19]+"\n"
         else:
@@ -151,7 +158,7 @@ def main():
     if not done:
       redirects+=1
 
-  if not quiet:
+  if not options.quiet:
     sys.stdout.write("\n"+summary)
     print "total redirects: "+str(redirects)
 
