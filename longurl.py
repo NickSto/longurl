@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # 
-# Example short urls to try:
+# Example short urls:
 # http://t.co/oZ2IWUfW9m - relatively sane - should end at gift-card-rewards.com
 # - update: oops, disabled!
 # http://bit.ly/1b5KFTr - 14 redirects! - should end at www.nextag.com
@@ -17,85 +17,71 @@
 # - both include a Location header with a space character
 # http://bit.ly/1aYLVck - HTMLParser throws a UnicodeDecodeError
 # Bad byte in html of http://shop.lenovo.com/us/en/laptops/thinkpad/x-series/x1-carbon-touch/?cid=US:display:lDtDOc&dfaid=1
+# http://ift.tt/1gLewTn - gives "Unrecognized URI scheme" when it requests:
+# https://www.facebook.com/photo.php?fbid=10152572961694741&set=a.10152523012949741.1073741826.699139740&type=1
+# http://zdbb.net/u/pd - meta redirect contains percent-encoded url:
+# - http%3A%2F%2Fadfarm.mediaplex.com%2Fad%2Fck%2F12309-196588-3601-49%3FDURL%3Dhttp%253A%252F%252Fwww.dell.com%252Fus%252Fp%252Fxps-11-9p33%252Fpd.aspx%253F~ck%253Dmn
 import os
 import re
 import sys
 import httplib
 import urlparse
+import argparse
 import subprocess
 import HTMLParser
 import distutils.spawn
-from optparse import OptionParser
 
 COLUMNS_DEFAULT = 80
 SCHEME_REGEX = r'^[^?#:]+://'
 
-DEFAULTS = {'quiet':False, 'debug':False, 'custom_ua':False,
-  'max_response_read':128} # kilobytes
-USAGE = """Usage: %prog [options] http://sho.rt/url"""
+OPT_DEFAULTS = {'quiet':False, 'custom_ua':False, 'max_response_read':128}
 DESCRIPTION = """Follow the chain of redirects from the starting url. This
 will print the start url, then every redirect in the chain. Can omit the
 'http://' from the url argument."""
-EPILOG=""""""
+EPILOG="""Set the DEBUG environment variable to "true" to run in debug mode."""
 USER_AGENT_BROWSER = 'Mozilla/5.0 (Windows NT 6.1; Win64; x64; rv:25.0) Gecko/20100101 Firefox/25.0'
 USER_AGENT_CUSTOM = 'longurl.py'
 # Some of the headers in the full list can cause problems:
-# ACCEPT = 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
-# ACCEPT_LANG = 'en-US,en;q=0.5'
-# ACCEPT_ENCOD = 'gzip, deflate'
-# CONNECTION = 'keep-alive'
-# headers = {'Accept':ACCEPT, 'Accept':ACCEPT,
-#   'Accept-Language':ACCEPT_LANG, 'Accept-Encoding':ACCEPT_ENCOD,
-#   'Connection':CONNECTION}
+# headers = {
+#   'Accept':'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+#   'Accept-Language':'en-US,en;q=0.5',
+#   'Accept-Encoding':'gzip, deflate',
+#   'Connection':'keep-alive',
+# }
 headers = {}
 
-# try to set debug as a global
-debug = False
-if '-d' in sys.argv[1:] or '--debug' in sys.argv[1:]:
-  debug = True
-for opt in sys.argv[1:]:
-  if re.match(r'^-[a-zA-Z]*d', opt):
-    debug = True
+# set debug as a global
+debug = os.environ.get('DEBUG')
 
 def main():
 
-  parser = OptionParser(usage=USAGE, description=DESCRIPTION, epilog=EPILOG)
+  parser = argparse.ArgumentParser(description=DESCRIPTION, epilog=EPILOG)
+  parser.set_defaults(**OPT_DEFAULTS)
 
-  parser.add_option('-q', '--quiet', dest='quiet', action='store_const',
-    const=not(DEFAULTS.get('quiet')), default=DEFAULTS.get('quiet'),
+  parser.add_argument('url', metavar='http://sho.rt/url', help='The short url.')
+  parser.add_argument('-q', '--quiet', action='store_true',
     help='Suppress all output but the list of URLs. The number of output lines '
-      +'will be 1 + the number of redirects.')
-  parser.add_option('-u', '--custom_ua', dest='custom_ua', action='store_const',
-    const=not(DEFAULTS.get('custom_ua')), default=DEFAULTS.get('custom_ua'),
+      'will be 1 + the number of redirects.')
+  parser.add_argument('-u', '--custom-ua', action='store_true',
     help="Use the script's own custom user agent. By default it mimics a "
-      +"browser user agent (Firefox), in order to get servers to treat it like "
-      +'any other "regular" user, but sometimes the effect can be worse than '
-      +'when they see an unrecognized UA. With this option, it will give the '
-      +'string "'+USER_AGENT_CUSTOM+'".')
-  parser.add_option('-m', '--max-response-read', dest='max_response_read',
-    type='int', default=DEFAULTS.get('max_response_read'),
+      "browser user agent (Firefox), in order to get servers to treat it like "
+      'any other "regular" user, but sometimes the effect can be worse than '
+      'when they see an unrecognized UA. With this option, it will give the '
+      'string "'+USER_AGENT_CUSTOM+'".')
+  parser.add_argument('-m', '--max-response-read', type=int,
     help='Maximum amount of response to download, looking for meta refreshes '
-      +'in the HTML. Given in kilobytes. Default: %defaultkb.')
-  parser.add_option('-d', '--debug', dest='debug', action='store_const',
-    const=not(DEFAULTS.get('debug')), default=DEFAULTS.get('debug'),
-    help='Turn on debug mode.')
+      'in the HTML. Given in kilobytes. Default: %(default)s kb.')
 
-  (options, arguments) = parser.parse_args()
+  args = parser.parse_args()
 
-  if not arguments:
-    parser.print_help()
-    exit(1)
-  else:
-    url = arguments[0]
-
-  if options.custom_ua:
+  if args.custom_ua:
     headers['User-Agent'] = USER_AGENT_CUSTOM
   else:
     headers['User-Agent'] = USER_AGENT_BROWSER
 
-
   columns = get_columns(COLUMNS_DEFAULT)
 
+  url = args.url
   if not re.search(SCHEME_REGEX, url):
     url = 'http://'+url
 
@@ -132,7 +118,7 @@ def main():
 
     if location_url is None:
       if response.status == 200:
-        html = response.read(options.max_response_read * 1024)
+        html = response.read(args.max_response_read * 1024)
         try:
           meta_url = meta_redirect(html)
         except Exception:
@@ -146,7 +132,7 @@ def main():
         fail("Error: non-200 status and no Location header. Status message:\n\t"
           +str(response.status)+': '+response.reason)
     else:
-      if not options.quiet and not re.search(SCHEME_REGEX, location_url):
+      if not args.quiet and not re.search(SCHEME_REGEX, location_url):
         if location_url.startswith('/'):
           summary += "absolute path from "+url[:columns-19]+"\n"
         else:
@@ -158,7 +144,7 @@ def main():
     if not done:
       redirects+=1
 
-  if not options.quiet:
+  if not args.quiet:
     sys.stdout.write("\n"+summary)
     print "total redirects: "+str(redirects)
 
