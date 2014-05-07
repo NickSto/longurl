@@ -24,6 +24,7 @@
 import os
 import re
 import sys
+import urllib
 import httplib
 import urlparse
 import argparse
@@ -90,11 +91,22 @@ def main():
   done = False
   while not done:
 
-    #TODO: proper percent-encoding
-    url = re.sub(r' ', '%20', url)
-
     print url
-    url_parsed = urlparse.urlsplit(url)
+
+    # parse the URL
+    parsed = False
+    unquoted = False
+    while not parsed:
+      url_parsed = urlparse.urlsplit(url)
+      if url_parsed[0] and url_parsed[1]:
+        parsed = True
+      elif not unquoted:
+        # only try to percent-decode if it doesn't work the first time
+        url = urllib.unquote(url)
+        unquoted = True
+      else:
+        print summary
+        fail('Error: Invalid URL:\n'+url)
     scheme = url_parsed[0]
     domain = url_parsed[1]
     path = url_parsed[2]
@@ -109,6 +121,7 @@ def main():
     elif scheme == 'https':
       conex = httplib.HTTPSConnection(domain)
     else:
+
       fail("Error: Unrecognized URI scheme in:\n"+url)
     # Note: both of these steps can throw exceptions
     conex.request('GET', path, '', headers)
