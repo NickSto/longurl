@@ -93,20 +93,8 @@ def main():
 
     print url
 
-    # parse the URL
-    parsed = False
-    unquoted = False
-    while not parsed:
-      url_parsed = urlparse.urlsplit(url)
-      if url_parsed[0] and url_parsed[1]:
-        parsed = True
-      elif not unquoted:
-        # only try to percent-decode if it doesn't work the first time
-        url = urllib.unquote(url)
-        unquoted = True
-      else:
-        print summary
-        fail('Error: Invalid URL:\n'+url)
+    # parse the URL's components
+    url_parsed = urlparse.urlsplit(url)
     scheme = url_parsed[0]
     domain = url_parsed[1]
     path = url_parsed[2]
@@ -121,15 +109,15 @@ def main():
     elif scheme == 'https':
       conex = httplib.HTTPSConnection(domain)
     else:
-
       fail("Error: Unrecognized URI scheme in:\n"+url)
     # Note: both of these steps can throw exceptions
     conex.request('GET', path, '', headers)
     response = conex.getresponse()
 
-    location_url = response.getheader('Location')
+    redirect_url = response.getheader('Location')
 
-    if location_url is None:
+    # Check for meta refresh
+    if redirect_url is None:
       if response.status == 200:
         html = response.read(args.max_response_read * 1024)
         try:
@@ -138,21 +126,24 @@ def main():
           meta_url = None   # on error, proceed as if none was found
         if meta_url:
           summary += "meta refresh from  "+url[:columns-19]+"\n"
-          url = meta_url
+          redirect_url = meta_url
         else:
+          # If no Location header and no meta refresh, then we're at the end
           done = True
       else:
         fail("Error: non-200 status and no Location header. Status message:\n\t"
           +str(response.status)+': '+response.reason)
-    else:
-      if not args.quiet and not re.search(SCHEME_REGEX, location_url):
-        if location_url.startswith('/'):
+    conex.close()
+
+    # Fix percent-encoded and relative urls
+    if redirect_url:
+      if not re.search(SCHEME_REGEX, redirect_url):
+        redirect_url = urllib.unquote(redirect_url)
+        if redirect_url.startswith('/'):
           summary += "absolute path from "+url[:columns-19]+"\n"
         else:
           summary += "relative path from "+url[:columns-19]+"\n"
-      url = urlparse.urljoin(url, location_url)
-
-    conex.close()
+      url = urlparse.urljoin(url, redirect_url)
 
     if not done:
       redirects+=1
