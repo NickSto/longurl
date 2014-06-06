@@ -38,7 +38,8 @@ SCHEME_REGEX = r'^[^?#:]+://'
 OPT_DEFAULTS = {'quiet':False, 'custom_ua':False, 'max_response_read':128}
 DESCRIPTION = """Follow the chain of redirects from the starting url. This
 will print the start url, then every redirect in the chain. Can omit the
-'http://' from the url argument."""
+'http://' from the url argument. If xclip is installed, it will copy the final
+domain name to the clipboard."""
 EPILOG="""Set the DEBUG environment variable to "true" to run in debug mode."""
 USER_AGENT_BROWSER = 'Mozilla/5.0 (Windows NT 6.1; Win64; x64; rv:25.0) Gecko/20100101 Firefox/25.0'
 USER_AGENT_CUSTOM = 'longurl.py'
@@ -72,8 +73,13 @@ def main():
   parser.add_argument('-m', '--max-response-read', type=int,
     help='Maximum amount of response to download, looking for meta refreshes '
       'in the HTML. Given in kilobytes. Default: %(default)s kb.')
+  parser.add_argument('-C', '--no-clipboard', action='store_true',
+    help='Do not copy the final domain to the clipboard.')
 
   args = parser.parse_args()
+
+  if not distutils.spawn.find_executable('xclip'):
+    args.no_clipboard = True
 
   if args.custom_ua:
     headers['User-Agent'] = USER_AGENT_CUSTOM
@@ -103,6 +109,9 @@ def main():
     query = url_parsed[3]
     if query:
       path += '?'+query
+
+    if not args.no_clipboard:
+      copy_domain(domain)
 
     if scheme == 'http':
       conex = httplib.HTTPConnection(domain)
@@ -183,6 +192,15 @@ class RefreshParser(HTMLParser.HTMLParser):
       self.url = content[url_index:]
     else:
       return
+
+
+def copy_domain(domain):
+  """Use xclip to copy the domain to the clipboard.
+  Removes starting "www." if present."""
+  if domain.startswith('www.') and domain.count('.') > 1:
+    domain = domain[4:]
+  process = subprocess.Popen(['xclip', '-sel', 'clip'], stdin=subprocess.PIPE)
+  process.communicate(input=domain)
 
 
 def get_columns(default=None):
