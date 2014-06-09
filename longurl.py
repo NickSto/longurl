@@ -21,6 +21,7 @@
 # https://www.facebook.com/photo.php?fbid=10152572961694741&set=a.10152523012949741.1073741826.699139740&type=1
 # http://zdbb.net/u/pd - meta redirect contains percent-encoded url:
 # - http%3A%2F%2Fadfarm.mediaplex.com%2Fad%2Fck%2F12309-196588-3601-49%3FDURL%3Dhttp%253A%252F%252Fwww.dell.com%252Fus%252Fp%252Fxps-11-9p33%252Fpd.aspx%253F~ck%253Dmn
+#TODO: read from stdin, add option to only print final url
 import os
 import re
 import sys
@@ -34,6 +35,8 @@ import distutils.spawn
 
 COLUMNS_DEFAULT = 80
 SCHEME_REGEX = r'^[^?#:]+://'
+URL_REGEX = r'^(https?://)?([a-zA-Z0-9-]+\.)+[a-zA-Z0-9]+(/\S*)?$'
+REPUTATION_URL = 'https://www.mywot.com/en/scorecard/'
 
 OPT_DEFAULTS = {'quiet':False, 'custom_ua':False, 'max_response_read':128}
 DESCRIPTION = """Follow the chain of redirects from the starting url. This
@@ -60,7 +63,9 @@ def main():
   parser = argparse.ArgumentParser(description=DESCRIPTION, epilog=EPILOG)
   parser.set_defaults(**OPT_DEFAULTS)
 
-  parser.add_argument('url', metavar='http://sho.rt/url', help='The short url.')
+  parser.add_argument('url', metavar='http://sho.rt/url', nargs='?',
+    help='The short url. If not given, this will use xclip to search for a url '
+      'in your clipboard.')
   parser.add_argument('-q', '--quiet', action='store_true',
     help='Suppress all output but the list of URLs. The number of output lines '
       'will be 1 + the number of redirects.')
@@ -73,8 +78,15 @@ def main():
   parser.add_argument('-m', '--max-response-read', type=int,
     help='Maximum amount of response to download, looking for meta refreshes '
       'in the HTML. Given in kilobytes. Default: %(default)s kb.')
+  parser.add_argument('-l', '--paste-long', action='store_true',
+    help='Copy the final, long url to the clipboard at the end, instead of '
+      'just its domain name.')
   parser.add_argument('-C', '--no-clipboard', action='store_true',
     help='Do not copy the final domain to the clipboard.')
+  parser.add_argument('-f', '--firefox', action='store_true',
+    help='Use Firefox to open a page on a reputation-checking site, checking '
+      'the final domain.')
+
 
   args = parser.parse_args()
 
@@ -88,7 +100,14 @@ def main():
 
   columns = get_columns(COLUMNS_DEFAULT)
 
-  url = args.url
+  if args.url:
+    url = args.url
+  else:
+    url = url_from_clipboard()
+    if url is None:
+      parser.print_help()
+      fail('\nError finding valid url in clipboard.')
+
   if not re.search(SCHEME_REGEX, url):
     url = 'http://'+url
 
@@ -109,9 +128,6 @@ def main():
     query = url_parsed[3]
     if query:
       path += '?'+query
-
-    if not args.no_clipboard:
-      copy_domain(domain)
 
     if scheme == 'http':
       conex = httplib.HTTPConnection(domain)
@@ -157,9 +173,55 @@ def main():
     if not done:
       redirects+=1
 
+  # Remove starting www. from domain, if present
+  if domain.startswith('www.') and domain.count('.') > 1:
+    domain = domain[4:]
+
+  if args.firefox:
+    firefox_check(domain)
+
+  if not args.no_clipboard:
+    if args.paste_long:
+      to_clipboard(url)
+    else:
+      to_clipboard(domain)
+
   if not args.quiet:
     sys.stdout.write("\n"+summary)
     print "total redirects: "+str(redirects)
+
+
+def url_from_clipboard():
+  """Use xclip to copy the short url from the clipboard.
+  Checks it against a simple, broad URL regex, and returns None if no match.
+  Also returns None on error executing the xclip command."""
+  if not distutils.spawn.find_executable('xclip'):
+    return None
+  try:
+    output = subprocess.check_output(['xclip', '-o', '-sel', 'clip'])
+  except (OSError, subprocess.CalledProcessError):
+    return None
+  if re.search(URL_REGEX, output):
+    return output
+  else:
+    return None
+
+
+def to_clipboard(domain):
+  """Use xclip to copy the domain to the clipboard."""
+  process = subprocess.Popen(['xclip', '-sel', 'clip'], stdin=subprocess.PIPE)
+  process.communicate(input=domain)
+
+
+def firefox_check(domain, reputation_url=REPUTATION_URL):
+  """Use Firefox to open "reputation_url" + "domain"."""
+  if not distutils.spawn.find_executable('firefox'):
+    return None
+  devnull = open(os.devnull, 'wb')
+  try:
+    subprocess.call(['firefox', reputation_url+domain], stderr=devnull)
+  finally:
+    devnull.close()
 
 
 def meta_redirect(html):
@@ -192,15 +254,6 @@ class RefreshParser(HTMLParser.HTMLParser):
       self.url = content[url_index:]
     else:
       return
-
-
-def copy_domain(domain):
-  """Use xclip to copy the domain to the clipboard.
-  Removes starting "www." if present."""
-  if domain.startswith('www.') and domain.count('.') > 1:
-    domain = domain[4:]
-  process = subprocess.Popen(['xclip', '-sel', 'clip'], stdin=subprocess.PIPE)
-  process.communicate(input=domain)
 
 
 def get_columns(default=None):
