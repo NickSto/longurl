@@ -41,9 +41,11 @@ REPUTATION_URL = 'https://www.mywot.com/en/scorecard/'
 OPT_DEFAULTS = {'quiet':False, 'custom_ua':False, 'max_response_read':128}
 DESCRIPTION = """Follow the chain of redirects from the starting url. This
 will print the start url, then every redirect in the chain. Can omit the
-'http://' from the url argument. If xclip is installed, it will copy the final
-domain name to the clipboard."""
-EPILOG="""Set the DEBUG environment variable to "true" to run in debug mode."""
+'http://' from the url argument. Extra features: If no url is given on the
+command line, it will use xclip to find it on the clipboard. By default it will
+also copy the final url to the clipboard at the end, and open a reputation-
+checking site (mywot.com in Firefox) for the final url's domain name."""
+EPILOG="""Set the $DEBUG environment variable to "true" to run in debug mode."""
 USER_AGENT_BROWSER = 'Mozilla/5.0 (Windows NT 6.1; Win64; x64; rv:25.0) Gecko/20100101 Firefox/25.0'
 USER_AGENT_CUSTOM = 'longurl.py'
 # Some of the headers in the full list can cause problems:
@@ -67,8 +69,10 @@ def main():
     help='The short url. If not given, this will use xclip to search for a url '
       'in your clipboard.')
   parser.add_argument('-q', '--quiet', action='store_true',
-    help='Suppress all output but the list of URLs. The number of output lines '
+    help='Suppress all output but the list of urls. The number of output lines '
       'will be 1 + the number of redirects.')
+  parser.add_argument('-Q', '--very-quiet', action='store_true',
+    help='Suppress all output but the final url.')
   parser.add_argument('-u', '--custom-ua', action='store_true',
     help="Use the script's own custom user agent. By default it mimics a "
       "browser user agent (Firefox), in order to get servers to treat it like "
@@ -78,17 +82,21 @@ def main():
   parser.add_argument('-m', '--max-response-read', type=int,
     help='Maximum amount of response to download, looking for meta refreshes '
       'in the HTML. Given in kilobytes. Default: %(default)s kb.')
-  parser.add_argument('-l', '--paste-long', action='store_true',
-    help='Copy the final, long url to the clipboard at the end, instead of '
-      'just its domain name.')
   parser.add_argument('-C', '--no-clipboard', action='store_true',
     help='Do not copy the final domain to the clipboard.')
-  parser.add_argument('-f', '--firefox', action='store_true',
-    help='Use Firefox to open a page on a reputation-checking site, checking '
-      'the final domain.')
-
+  parser.add_argument('-F', '--no-firefox', action='store_true',
+    help='Don\'t open Firefox at the end (to a reputation-checking site for '
+      'the final domain). Also, just the final domain name will be placed on '
+      'the clipboard instead of the full url.')
+  parser.add_argument('-S', '--simple', action='store_true',
+    help='Don\'t use any fancy features; just print the urls. Equivalent to '
+      'setting -C and -F.')
 
   args = parser.parse_args()
+
+  if args.simple:
+    args.no_firefox = True
+    args.no_clipboard = True
 
   if not distutils.spawn.find_executable('xclip'):
     args.no_clipboard = True
@@ -116,7 +124,8 @@ def main():
   done = False
   while not done:
 
-    print url
+    if not args.very_quiet:
+      print url
 
     # parse the URL's components
     url_parsed = urlparse.urlsplit(url)
@@ -177,18 +186,22 @@ def main():
   if domain.startswith('www.') and domain.count('.') > 1:
     domain = domain[4:]
 
-  if args.firefox:
-    firefox_check(domain)
-
-  if not args.no_clipboard:
-    if args.paste_long:
-      to_clipboard(url)
-    else:
-      to_clipboard(domain)
-
-  if not args.quiet:
+  if args.very_quiet:
+    print url
+  elif args.quiet:
+    pass
+  else:
     sys.stdout.write("\n"+summary)
     print "total redirects: "+str(redirects)
+
+  if not args.no_clipboard:
+    if args.no_firefox:
+      to_clipboard(domain)
+    else:
+      to_clipboard(url)
+
+  if not args.no_firefox:
+    firefox_check(domain)
 
 
 def url_from_clipboard():
