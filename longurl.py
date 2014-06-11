@@ -41,10 +41,8 @@ REPUTATION_URL = 'https://www.mywot.com/en/scorecard/'
 OPT_DEFAULTS = {'quiet':False, 'custom_ua':False, 'max_response_read':128}
 DESCRIPTION = """Follow the chain of redirects from the starting url. This
 will print the start url, then every redirect in the chain. Can omit the
-'http://' from the url argument. Extra features: If no url is given on the
-command line, it will use xclip to find it on the clipboard. By default it will
-also copy the final url to the clipboard at the end, and open a reputation-
-checking site (mywot.com in Firefox) for the final url's domain name."""
+'http://' from the url argument. If no url is given on the command line, it
+will try to use xclip to find it on the clipboard."""
 EPILOG="""Set the $DEBUG environment variable to "true" to run in debug mode."""
 USER_AGENT_BROWSER = 'Mozilla/5.0 (Windows NT 6.1; Win64; x64; rv:25.0) Gecko/20100101 Firefox/25.0'
 USER_AGENT_CUSTOM = 'longurl.py'
@@ -82,21 +80,15 @@ def main():
   parser.add_argument('-m', '--max-response-read', type=int,
     help='Maximum amount of response to download, looking for meta refreshes '
       'in the HTML. Given in kilobytes. Default: %(default)s kb.')
-  parser.add_argument('-C', '--no-clipboard', action='store_true',
-    help='Do not copy the final domain to the clipboard.')
-  parser.add_argument('-F', '--no-firefox', action='store_true',
-    help='Don\'t open Firefox at the end (to a reputation-checking site for '
-      'the final domain). Also, just the final domain name will be placed on '
-      'the clipboard instead of the full url.')
-  parser.add_argument('-S', '--simple', action='store_true',
-    help='Don\'t use any fancy features; just print the urls. Equivalent to '
-      'setting -C and -F.')
+  parser.add_argument('-c', '--clipboard', action='store_true',
+    help='Copy the final domain to the clipboard (or the full url if using '
+      '--firefox).')
+  parser.add_argument('-f', '--firefox', action='store_true',
+    help='Open Firefox at the end to a reputation-checking site (mywot.com) '
+      'for the final domain. Also, the full final url will be placed on the '
+      'clipboard instead of just the domain.')
 
   args = parser.parse_args()
-
-  if args.simple:
-    args.no_firefox = True
-    args.no_clipboard = True
 
   if not distutils.spawn.find_executable('xclip'):
     args.no_clipboard = True
@@ -194,13 +186,13 @@ def main():
     sys.stdout.write("\n"+summary)
     print "total redirects: "+str(redirects)
 
-  if not args.no_clipboard:
-    if args.no_firefox:
-      to_clipboard(domain)
-    else:
+  if args.clipboard:
+    if args.firefox:
       to_clipboard(url)
+    else:
+      to_clipboard(domain)
 
-  if not args.no_firefox:
+  if args.firefox:
     firefox_check(domain)
 
 
