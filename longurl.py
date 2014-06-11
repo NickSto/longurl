@@ -44,7 +44,8 @@ will print the start url, then every redirect in the chain. Can omit the
 'http://' from the url argument. If no url is given on the command line, it
 will try to use xclip to find it on the clipboard."""
 EPILOG="""Set the $DEBUG environment variable to "true" to run in debug mode."""
-USER_AGENT_BROWSER = 'Mozilla/5.0 (Windows NT 6.1; Win64; x64; rv:25.0) Gecko/20100101 Firefox/25.0'
+USER_AGENT_BROWSER = ('Mozilla/5.0 (Windows NT 6.1; Win64; x64; rv:32.0) '
+  'Gecko/20100101 Firefox/32.0')
 USER_AGENT_CUSTOM = 'longurl.py'
 # Some of the headers in the full list can cause problems:
 # headers = {
@@ -71,15 +72,6 @@ def main():
       'will be 1 + the number of redirects.')
   parser.add_argument('-Q', '--very-quiet', action='store_true',
     help='Suppress all output but the final url.')
-  parser.add_argument('-u', '--custom-ua', action='store_true',
-    help="Use the script's own custom user agent. By default it mimics a "
-      "browser user agent (Firefox), in order to get servers to treat it like "
-      'any other "regular" user, but sometimes the effect can be worse than '
-      'when they see an unrecognized UA. With this option, it will give the '
-      'string "'+USER_AGENT_CUSTOM+'".')
-  parser.add_argument('-m', '--max-response-read', type=int,
-    help='Maximum amount of response to download, looking for meta refreshes '
-      'in the HTML. Given in kilobytes. Default: %(default)s kb.')
   parser.add_argument('-c', '--clipboard', action='store_true',
     help='Copy the final domain to the clipboard (or the full url if using '
       '--firefox).')
@@ -87,16 +79,26 @@ def main():
     help='Open Firefox at the end to a reputation-checking site (mywot.com) '
       'for the final domain. Also, the full final url will be placed on the '
       'clipboard instead of just the domain.')
+  parser.add_argument('-u', '--fake-user-agent', action='store_true',
+    help='Use a Firefox user agent string instead of the script\'s own custom '
+      'user agent ("'+USER_AGENT_CUSTOM+'"). Counterintuitively, many url '
+      'shorteners (including Twitter\'s t.co) react better to unrecognized '
+      'user agents (fewer meta refreshes). But in case some reject '
+      'unrecognized ones, you can use this to pretend to be a normal browser. '
+      'The Firefox user agent string is "'+USER_AGENT_BROWSER+'".')
+  parser.add_argument('-m', '--max-response-read', type=int,
+    help='Maximum amount of response to download, looking for meta refreshes '
+      'in the HTML. Given in kilobytes. Default: %(default)s kb.')
 
   args = parser.parse_args()
 
   if not distutils.spawn.find_executable('xclip'):
     args.no_clipboard = True
 
-  if args.custom_ua:
-    headers['User-Agent'] = USER_AGENT_CUSTOM
-  else:
+  if args.fake_user_agent:
     headers['User-Agent'] = USER_AGENT_BROWSER
+  else:
+    headers['User-Agent'] = USER_AGENT_CUSTOM
 
   columns = get_columns(COLUMNS_DEFAULT)
 
