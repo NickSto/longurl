@@ -18,10 +18,13 @@
 # http://bit.ly/1aYLVck - HTMLParser throws a UnicodeDecodeError
 # Bad byte in html of http://shop.lenovo.com/us/en/laptops/thinkpad/x-series/x1-carbon-touch/?cid=US:display:lDtDOc&dfaid=1
 # http://ift.tt/1gLewTn - gives "Unrecognized URI scheme" when it requests:
-# https://www.facebook.com/photo.php?fbid=10152572961694741&set=a.10152523012949741.1073741826.699139740&type=1
+# - https://www.facebook.com/photo.php?fbid=10152572961694741&set=a.10152523012949741.1073741826.699139740&type=1
 # http://zdbb.net/u/pd - meta redirect contains percent-encoded url:
 # - http%3A%2F%2Fadfarm.mediaplex.com%2Fad%2Fck%2F12309-196588-3601-49%3FDURL%3Dhttp%253A%252F%252Fwww.dell.com%252Fus%252Fp%252Fxps-11-9p33%252Fpd.aspx%253F~ck%253Dmn
-#TODO: read from stdin, add option to only print final url
+# http://zdbb.net/u/27t - location header contains non-percent-encoded chars:
+# - http://zdbb.net/commerce/?http%3a%2f%2flogicbuy.pgpartner.com%2frd.php%3fpg%3d%7e%7e10%26r%3d482%26z%3d20001%26m%3d1049464384%26mt%3d1%7e3%7e282.82%7e269.99%7e277.60%7e%7e%7elogicbuy_0617_ars_44092_bh_monitor_viewsonic27%7ey%7e%7e%7e%7e%7e%26q%3dm%26rdgt%3d1403032209%26dl%3d1%26source%3dxmlapi%26request_id%3da58be1bc4709135d7821cce4baa8f95c%26ret%3d1403032209%26k%3d525917bbf4a36065124279e164a76503&provider=PriceGrabber&productid=1049464384&price=$279.99&merchant=B&H Photo-Video&ziffcatid=8044&guid=2de69720-aeb3-4ced-a1d0-a9b07f71bfdf&referrer=logicbuy.com&pubref=0617_ars_44092_bh_monitor_viewsonic27
+#   - has a space and ampersand (and dollar sign)
+#TODO: read from stdin
 import os
 import re
 import sys
@@ -172,6 +175,8 @@ def main():
         else:
           summary += "relative path from "+url[:columns-19]+"\n"
       url = urlparse.urljoin(url, redirect_url)
+    # do some limited percent encoding of always-invalid characters
+    url = url.replace(' ', '%20')
 
     if not done:
       redirects+=1
