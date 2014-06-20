@@ -1,6 +1,29 @@
 #!/usr/bin/env bash
 dirname=$(dirname $0)
 
+SIMPLE_URLS="
+http://t.co/mWfAwPy5O7
+http://bit.ly/1aYLVck
+http://ift.tt/1gLewTn
+http://zdbb.net/u/pd
+http://zdbb.net/u/2aq"
+
+# The straightforward ones
+for url in $SIMPLE_URLS; do
+  filename=$(echo "$url" | sed -E 's#^https?://##' | sed -E 's#/#-#g').out
+  if $dirname/../longurl.py -W 80 "$url" | diff - $dirname/$filename; then
+    echo "pass: $url"
+  else
+    echo "FAIL: $url"
+  fi
+done
+
+# The complicated ones
+if $dirname/../longurl.py -W 80 'http://t.co/2V0HctQdnr' | sed -E 's#^(http://ohmyyy.gt/scmf/)[A-Za-z0-9_-]+/#\1/#' | diff - $dirname/t.co-2V0HctQdnr.out; then
+  echo 'pass: http://t.co/2V0HctQdnr'
+else
+  echo 'FAIL: http://t.co/2V0HctQdnr'
+fi
 if $dirname/../longurl.py -W 80 'http://bit.ly/1c9r7Bt' | sed -E 's/(siteID=dZCX6Je2w8Q)-[A-Za-z0-9_.]+$/\1/i' | diff - $dirname/bit.ly-1c9r7Bt.out; then
   echo 'pass: http://bit.ly/1c9r7Bt'
 else
@@ -21,28 +44,9 @@ if $dirname/../longurl.py -W 80 'http://bit.ly/HtZ9lX' | sed -E 's#^(http://(cj\
 else
   echo 'FAIL: http://bit.ly/HtZ9lX'
 fi
-if $dirname/../longurl.py -W 80 'http://bit.ly/1aYLVck' | diff - $dirname/bit.ly-1aYLVck.out; then
-  echo 'pass: http://bit.ly/1aYLVck'
-else
-  echo 'FAIL: http://bit.ly/1aYLVck'
-fi
-if $dirname/../longurl.py -W 80 'http://ift.tt/1gLewTn' | diff - $dirname/ift.tt-1gLewTn.out; then
-  echo 'pass: http://ift.tt/1gLewTn'
-else
-  echo 'FAIL: http://ift.tt/1gLewTn'
-fi
-if $dirname/../longurl.py -W 80 'http://zdbb.net/u/pd' | diff - $dirname/zdbb.net-u-pd.out; then
-  echo 'pass: http://zdbb.net/u/pd'
-else
-  echo 'FAIL: http://zdbb.net/u/pd'
-fi
-if $dirname/../longurl.py -W 80 'http://zdbb.net/u/27t' | sed -E 's/ut=[0-9a-f]+$/ut=/' | sed -E 's/guid=[0-9a-f-]+&//' | diff - $dirname/zdbb.net-u-27t.out; then
+# only tests the final url:
+if $dirname/../longurl.py -Q 'http://zdbb.net/u/27t' | sed -E 's/&/\n/g' | sort | diff - $dirname/zdbb.net-u-27t.out; then
   echo 'pass: http://zdbb.net/u/27t'
 else
   echo 'FAIL: http://zdbb.net/u/27t'
-fi
-if $dirname/../longurl.py -W 80 'http://zdbb.net/u/2aq' | diff - $dirname/zdbb.net-u-2aq.out; then
-  echo 'pass: http://zdbb.net/u/2aq'
-else
-  echo 'FAIL: http://zdbb.net/u/2aq'
 fi
