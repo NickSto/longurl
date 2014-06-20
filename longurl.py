@@ -1,16 +1,15 @@
 #!/usr/bin/env python
 # 
 # Example short urls:
-# http://t.co/oZ2IWUfW9m - relatively sane - should end at gift-card-rewards.com
-# - update: oops, disabled!
-# http://bit.ly/1b5KFTr - 14 redirects! - should end at www.nextag.com
-# - oops, looks like it might've expired; only 7 redirects now.
+# *url = disabled
+# *http://t.co/oZ2IWUfW9m - relatively sane - should end at gift-card-rewards.com
+# *http://bit.ly/1b5KFTr - 14 redirects! - should end at www.nextag.com
 # http://bit.ly/1c9r7Bt - meta refresh - actually ends at www.toshiba.com
 # - Careful, they can detect you re-using urls partway through
 #   the chain (session ids) and give you a different redirect or a 500
 # http://bit.ly/18bArwp - meta refresh - ends at accessories.us.dell.com
 # - via zdbb.net, who might be responsible for the blocking of the last one
-# http://bit.ly/1a9xteY - relative Location - ends at accessories.us.dell.com
+# *http://bit.ly/1a9xteY - relative Location - ends at accessories.us.dell.com
 # - and the location doesn't start with a /
 # http://bit.ly/1iKbWfU
 # http://bit.ly/HtZ9lX
@@ -24,6 +23,8 @@
 # http://zdbb.net/u/27t - location header contains non-percent-encoded chars:
 # - http://zdbb.net/commerce/?http%3a%2f%2flogicbuy.pgpartner.com%2frd.php%3fpg%3d%7e%7e10%26r%3d482%26z%3d20001%26m%3d1049464384%26mt%3d1%7e3%7e282.82%7e269.99%7e277.60%7e%7e%7elogicbuy_0617_ars_44092_bh_monitor_viewsonic27%7ey%7e%7e%7e%7e%7e%26q%3dm%26rdgt%3d1403032209%26dl%3d1%26source%3dxmlapi%26request_id%3da58be1bc4709135d7821cce4baa8f95c%26ret%3d1403032209%26k%3d525917bbf4a36065124279e164a76503&provider=PriceGrabber&productid=1049464384&price=$279.99&merchant=B&H Photo-Video&ziffcatid=8044&guid=2de69720-aeb3-4ced-a1d0-a9b07f71bfdf&referrer=logicbuy.com&pubref=0617_ars_44092_bh_monitor_viewsonic27
 #   - has a space and ampersand (and dollar sign)
+# http://zdbb.net/u/2aq - error caused by un-percent-encoding redirect:
+# - http://lt.dell.com/lt/lt.aspx?CID=277653&LID=5237896&DGC=BA&DGSeg=DHS&ACD=12309201646360146&DURL=http%3A%2F%2Faccessories.us.dell.com%2Fsna%2Fproductdetail.aspx%3Fc%3Dus%26l%3Den%26s%3Ddhs%26cs%3D19%26sku%3DA7707503%20
 #TODO: read from stdin
 import os
 import re
@@ -78,6 +79,8 @@ def main():
   parser.add_argument('-c', '--clipboard', action='store_true',
     help='Copy the final domain to the clipboard (or the full url if using '
       '--firefox).')
+  parser.add_argument('-p', '--percent-decode', action='store_true',
+    help='Decode percent-encoded characters in the redirect URL.')
   parser.add_argument('-f', '--firefox', action='store_true',
     help='Open Firefox at the end to a reputation-checking site (mywot.com) '
       'for the final domain. Also, the full final url will be placed on the '
@@ -168,8 +171,11 @@ def main():
 
     # Fix percent-encoded and relative urls
     if redirect_url:
-      if not re.search(SCHEME_REGEX, redirect_url):
+      # Try to tell when it's a percent-encoded
+      if (redirect_url.startswith('http%3A%2F%2F') or
+          redirect_url.startswith('https%3A%2F%2F') or args.percent_decode):
         redirect_url = urllib.unquote(redirect_url)
+      if not re.search(SCHEME_REGEX, redirect_url):
         if redirect_url.startswith('/'):
           summary += "absolute path from "+url[:columns-19]+"\n"
         else:
