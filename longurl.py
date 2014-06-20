@@ -95,6 +95,8 @@ def main():
   parser.add_argument('-m', '--max-response-read', type=int,
     help='Maximum amount of response to download, looking for meta refreshes '
       'in the HTML. Given in kilobytes. Default: %(default)s kb.')
+  parser.add_argument('-W', '--terminal-width', type=int,
+    help='Manually tell the script the number of columns in the terminal.')
 
   args = parser.parse_args()
 
@@ -106,7 +108,10 @@ def main():
   else:
     headers['User-Agent'] = USER_AGENT_CUSTOM
 
-  columns = get_columns(COLUMNS_DEFAULT)
+  if args.terminal_width:
+    columns = args.terminal_width
+  else:
+    columns = get_columns(COLUMNS_DEFAULT)
 
   if args.url:
     url = args.url
