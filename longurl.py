@@ -1,33 +1,6 @@
 #!/usr/bin/env python
-# 
-# Example short urls:
-# *url = disabled
-# *http://t.co/oZ2IWUfW9m - relatively sane - should end at gift-card-rewards.com
-# *http://bit.ly/1b5KFTr - 14 redirects! - should end at www.nextag.com
-# http://bit.ly/1c9r7Bt - meta refresh - actually ends at www.toshiba.com
-# - Careful, they can detect you re-using urls partway through
-#   the chain (session ids) and give you a different redirect or a 500
-# http://bit.ly/18bArwp - meta refresh - ends at accessories.us.dell.com
-# - via zdbb.net, who might be responsible for the blocking of the last one
-# *http://bit.ly/1a9xteY - relative Location - ends at accessories.us.dell.com
-# - and the location doesn't start with a /
-# http://bit.ly/1iKbWfU
-# http://bit.ly/HtZ9lX
-# - both include a Location header with a space character
-# http://bit.ly/1aYLVck - HTMLParser throws a UnicodeDecodeError
-# Bad byte in html of http://shop.lenovo.com/us/en/laptops/thinkpad/x-series/x1-carbon-touch/?cid=US:display:lDtDOc&dfaid=1
-# http://ift.tt/1gLewTn - gives "Unrecognized URI scheme" when it requests:
-# - https://www.facebook.com/photo.php?fbid=10152572961694741&set=a.10152523012949741.1073741826.699139740&type=1
-# http://zdbb.net/u/pd - meta redirect contains percent-encoded url:
-# - http%3A%2F%2Fadfarm.mediaplex.com%2Fad%2Fck%2F12309-196588-3601-49%3FDURL%3Dhttp%253A%252F%252Fwww.dell.com%252Fus%252Fp%252Fxps-11-9p33%252Fpd.aspx%253F~ck%253Dmn
-# http://zdbb.net/u/27t - location header contains non-percent-encoded chars:
-# - http://zdbb.net/commerce/?http%3a%2f%2flogicbuy.pgpartner.com%2frd.php%3fpg%3d%7e%7e10%26r%3d482%26z%3d20001%26m%3d1049464384%26mt%3d1%7e3%7e282.82%7e269.99%7e277.60%7e%7e%7elogicbuy_0617_ars_44092_bh_monitor_viewsonic27%7ey%7e%7e%7e%7e%7e%26q%3dm%26rdgt%3d1403032209%26dl%3d1%26source%3dxmlapi%26request_id%3da58be1bc4709135d7821cce4baa8f95c%26ret%3d1403032209%26k%3d525917bbf4a36065124279e164a76503&provider=PriceGrabber&productid=1049464384&price=$279.99&merchant=B&H Photo-Video&ziffcatid=8044&guid=2de69720-aeb3-4ced-a1d0-a9b07f71bfdf&referrer=logicbuy.com&pubref=0617_ars_44092_bh_monitor_viewsonic27
-#   - has a space and ampersand (and dollar sign)
-# http://zdbb.net/u/2aq - error caused by un-percent-encoding redirect:
-# - http://lt.dell.com/lt/lt.aspx?CID=277653&LID=5237896&DGC=BA&DGSeg=DHS&ACD=12309201646360146&DURL=http%3A%2F%2Faccessories.us.dell.com%2Fsna%2Fproductdetail.aspx%3Fc%3Dus%26l%3Den%26s%3Ddhs%26cs%3D19%26sku%3DA7707503%20
-#TODO: read from stdin
-import os
 import re
+import os
 import sys
 import urllib
 import httplib
@@ -47,11 +20,10 @@ DESCRIPTION = """Follow the chain of redirects from the starting url. This
 will print the start url, then every redirect in the chain. Can omit the
 'http://' from the url argument. If no url is given on the command line, it
 will try to use xclip to find it on the clipboard."""
-EPILOG="""Set the $DEBUG environment variable to "true" to run in debug mode."""
 USER_AGENT_BROWSER = ('Mozilla/5.0 (Windows NT 6.1; Win64; x64; rv:32.0) '
   'Gecko/20100101 Firefox/32.0')
 USER_AGENT_CUSTOM = 'longurl.py'
-# Some of the headers in the full list can cause problems:
+#TODO: Use good list of headers (some of these can cause problems):
 # headers = {
 #   'Accept':'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
 #   'Accept-Language':'en-US,en;q=0.5',
@@ -60,12 +32,10 @@ USER_AGENT_CUSTOM = 'longurl.py'
 # }
 headers = {}
 
-# set debug as a global
-debug = os.environ.get('DEBUG')
 
 def main():
 
-  parser = argparse.ArgumentParser(description=DESCRIPTION, epilog=EPILOG)
+  parser = argparse.ArgumentParser(description=DESCRIPTION)
   parser.set_defaults(**OPT_DEFAULTS)
 
   parser.add_argument('url', metavar='http://sho.rt/url', nargs='?',
@@ -113,13 +83,14 @@ def main():
   else:
     columns = get_columns(COLUMNS_DEFAULT)
 
+  #TODO: read from stdin
   if args.url:
     url = args.url
   else:
     url = url_from_clipboard()
     if url is None:
       parser.print_help()
-      fail('\nError finding valid url in clipboard.')
+      fail('Error finding valid url in clipboard.')
 
   if not re.search(SCHEME_REGEX, url):
     url = 'http://'+url
@@ -162,7 +133,7 @@ def main():
         try:
           meta_url = meta_redirect(html)
         except Exception:
-          meta_url = None   # on error, proceed as if none was found
+          meta_url = None  # on error, proceed as if none was found
         if meta_url:
           summary += "meta refresh from  "+url[:columns-19]+"\n"
           redirect_url = meta_url
@@ -171,14 +142,15 @@ def main():
           done = True
       else:
         fail("Error: non-200 status and no Location header. Status message:\n\t"
-          +str(response.status)+': '+response.reason)
+              +str(response.status)+': '+response.reason)
     conex.close()
 
     # Fix percent-encoded and relative urls
     if redirect_url:
-      # Try to tell when it's a percent-encoded
+      # Try to tell when it's a percent-encoded (or force with --percent-decode)
       if (redirect_url.startswith('http%3A%2F%2F') or
-          redirect_url.startswith('https%3A%2F%2F') or args.percent_decode):
+          redirect_url.startswith('https%3A%2F%2F') or
+          args.percent_decode):
         redirect_url = urllib.unquote(redirect_url)
       if not re.search(SCHEME_REGEX, redirect_url):
         if redirect_url.startswith('/'):
@@ -186,23 +158,21 @@ def main():
         else:
           summary += "relative path from "+url[:columns-19]+"\n"
       url = urlparse.urljoin(url, redirect_url)
-    # do some limited percent encoding of always-invalid characters
+    # Try to do some limited percent encoding of always-invalid characters
     url = url.replace(' ', '%20')
 
     if not done:
       redirects+=1
 
+  if args.very_quiet:
+    print url
+  elif not args.quiet:
+    sys.stdout.write("\n"+summary)
+    print "total redirects: "+str(redirects)
+
   # Remove starting www. from domain, if present
   if domain.startswith('www.') and domain.count('.') > 1:
     domain = domain[4:]
-
-  if args.very_quiet:
-    print url
-  elif args.quiet:
-    pass
-  else:
-    sys.stdout.write("\n"+summary)
-    print "total redirects: "+str(redirects)
 
   if args.clipboard:
     if args.firefox:
@@ -254,24 +224,28 @@ def meta_redirect(html):
   parser.feed(html)
   return parser.get_url()
 
+
 class RefreshParser(HTMLParser.HTMLParser):
   def __init__(self):
     HTMLParser.HTMLParser.__init__(self)
     self.url = None
+
   def get_url(self):
     return self.url
+
   def handle_starttag(self, tag, attrs):
-    """Reminder of what we're looking for:
-    <meta http-equiv="refresh" content="0;url=http://url.com" />
-    attrs = [('http-equiv', 'refresh'), ('content', '0;url=http://url.com')]"""
-    if tag == 'meta':
-      attrs_dict = dict(attrs)
-    else:
+    """Process each tag, returning any redirect url found in a <meta>.
+    Example of what it looks for:
+    <meta http-equiv="refresh" content="0;url=http://url.com" />"""
+    if tag != 'meta':
       return
+    attrs_dict = dict(attrs)
+    # Find an "http-equiv" attribute with value "refresh"
     if attrs_dict.get('http-equiv') == 'refresh':
       content = attrs_dict.get('content', '')
     else:
       return
+    # Extract the url
     url_index = content.lower().find('url=') + len('url=')
     if url_index >= len('url='):
       self.url = content[url_index:]
@@ -279,7 +253,7 @@ class RefreshParser(HTMLParser.HTMLParser):
       return
 
 
-def get_columns(default=None):
+def get_columns(default=80):
   """Get current terminal width, using stty command. If stty isn't available,
   or if it gives an error, return the default."""
   if not distutils.spawn.find_executable('stty'):
@@ -295,6 +269,7 @@ def get_columns(default=None):
     return int(output.split()[1])
   except ValueError:
     return default
+
 
 def fail(message):
   sys.stderr.write(message+"\n")

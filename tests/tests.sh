@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 dirname=$(dirname $0)
 
+echo 'N.B.: These are live urls, and they often expire, causing false failures!' >&2
+
 SIMPLE_URLS="
 http://t.co/mWfAwPy5O7
 http://bit.ly/1aYLVck
