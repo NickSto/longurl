@@ -90,13 +90,34 @@ def main():
   if not re.search(SCHEME_REGEX, url):
     url = 'http://'+url
 
-  summary = ''
+  (urls, events) = follow_redirects(url)
+
+  for url in urls:
+    if not args.very_quiet:
+      print url
+
+  if args.quiet:
+    return
+
+  for event in events:
+    if event['type'] == 'refresh':
+      print 'meta refresh from  '+event['url'][:columns-19]
+    elif event['type'] == 'absolute':
+      print 'absolute path from '+event['url'][:columns-19]
+    elif event['type'] == 'relative':
+      print 'relative path from '+event['url'][:columns-19]
+
+  print 'total redirects: {}'.format(len(urls)-1)
+
+
+def follow_redirects(url, percent_decode=False, max_response_read=128):
+  urls = [url]
+  events = []
   redirects = 0
   done = False
   while not done:
 
-    if not args.very_quiet:
-      print url
+    urls.append(url)
 
     # parse the URL's components
     url_parsed = urlparse.urlsplit(url)
@@ -124,13 +145,13 @@ def main():
     # Check for meta refresh
     if redirect_url is None:
       if response.status == 200:
-        html = response.read(args.max_response_read * 1024)
+        html = response.read(max_response_read * 1024)
         try:
           meta_url = meta_redirect(html)
         except Exception:
           meta_url = None  # on error, proceed as if none was found
         if meta_url:
-          summary += "meta refresh from  "+url[:columns-19]+"\n"
+          events.append({'type':'refresh', 'url':url})
           redirect_url = meta_url
         else:
           # If no Location header and no meta refresh, then we're at the end
@@ -145,13 +166,13 @@ def main():
       # Try to tell when it's a percent-encoded (or force with --percent-decode)
       if (redirect_url.startswith('http%3A%2F%2F') or
           redirect_url.startswith('https%3A%2F%2F') or
-          args.percent_decode):
+          percent_decode):
         redirect_url = urllib.unquote(redirect_url)
       if not re.search(SCHEME_REGEX, redirect_url):
         if redirect_url.startswith('/'):
-          summary += "absolute path from "+url[:columns-19]+"\n"
+          events.append({'type':'absolute', 'url':url})
         else:
-          summary += "relative path from "+url[:columns-19]+"\n"
+          events.append({'type':'relative', 'url':url})
       url = urlparse.urljoin(url, redirect_url)
     # Try to do some limited percent encoding of always-invalid characters
     url = url.replace(' ', '%20')
