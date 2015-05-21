@@ -85,7 +85,7 @@ def main():
     url = url_from_clipboard()
     if url is None:
       parser.print_help()
-      fail('Error finding valid url in clipboard.')
+      raise URLError('Error finding valid url in clipboard.')
 
   if not re.search(SCHEME_REGEX, url):
     url = 'http://'+url
@@ -150,7 +150,7 @@ def follow_redirects(url, percent_decode=False, max_response_read=128):
     elif scheme == 'https':
       conex = httplib.HTTPSConnection(domain)
     else:
-      fail("Error: Unrecognized URI scheme in:\n"+url)
+      raise URLError("Unrecognized URI scheme in:\n"+url)
     # Note: both of these steps can throw exceptions
     conex.request('GET', path, '', headers)
     response = conex.getresponse()
@@ -172,8 +172,8 @@ def follow_redirects(url, percent_decode=False, max_response_read=128):
           # If no Location header and no meta refresh, then we're at the end
           done = True
       else:
-        fail("Error: non-200 status and no Location header. Status message:\n\t{}: {}"
-             .format(response.status, response.reason))
+        raise URLError("Non-200 status and no Location header. Status message:\n\t{}: {}"
+                       .format(response.status, response.reason))
     conex.close()
 
     # Fix percent-encoded and relative urls
@@ -286,9 +286,10 @@ def get_columns(default=80):
     return default
 
 
-def fail(message):
-  sys.stderr.write(message+"\n")
-  sys.exit(1)
+class URLError(Exception):
+  def __init__(self, message=None):
+    if message:
+      Exception.__init__(self, message)
 
 
 if __name__ == "__main__":
