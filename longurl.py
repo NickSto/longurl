@@ -90,30 +90,45 @@ def main():
   if not re.search(SCHEME_REGEX, url):
     url = 'http://'+url
 
-  (urls, events) = follow_redirects(url)
+  # Do the actual redirect resolution.
+  (urls, events, domain) = follow_redirects(url)
 
+  # Print list of redirect urls.
   for url in urls:
     if not args.very_quiet:
       print url
+  if args.very_quiet:
+    print urls[-1]
 
-  if args.quiet:
-    return
+  # Print summary info.
+  if not args.quiet:
+    for event in events:
+      if event['type'] == 'refresh':
+        print 'meta refresh from  '+event['url'][:columns-19]
+      elif event['type'] == 'absolute':
+        print 'absolute path from '+event['url'][:columns-19]
+      elif event['type'] == 'relative':
+        print 'relative path from '+event['url'][:columns-19]
+    print 'total redirects: {}'.format(len(urls)-1)
 
-  for event in events:
-    if event['type'] == 'refresh':
-      print 'meta refresh from  '+event['url'][:columns-19]
-    elif event['type'] == 'absolute':
-      print 'absolute path from '+event['url'][:columns-19]
-    elif event['type'] == 'relative':
-      print 'relative path from '+event['url'][:columns-19]
+  # Copy final data to clipboard, and open reputation checker in browser, if requested.
+  if args.clipboard:
+    if args.firefox:
+      to_clipboard(urls[-1])
+    else:
+      to_clipboard(domain)
+  if args.firefox:
+    firefox_check(domain)
 
-  print 'total redirects: {}'.format(len(urls)-1)
 
-
+# THE MAIN LOGIC
+#TODO: Turn into generator to get real-time results.
 def follow_redirects(url, percent_decode=False, max_response_read=128):
-  urls = [url]
+  """Follow a chain of url redirects, returning a list of urls in the chain.
+  Includes the input url as the first in the list. Also returns an informational list of events
+  occurring during redirection and the domain of the final url."""
+  urls = []
   events = []
-  redirects = 0
   done = False
   while not done:
 
@@ -177,27 +192,11 @@ def follow_redirects(url, percent_decode=False, max_response_read=128):
     # Try to do some limited percent encoding of always-invalid characters
     url = url.replace(' ', '%20')
 
-    if not done:
-      redirects+=1
-
-  if args.very_quiet:
-    print url
-  elif not args.quiet:
-    sys.stdout.write("\n"+summary)
-    print "total redirects: "+str(redirects)
-
   # Remove starting www. from domain, if present
   if domain.startswith('www.') and domain.count('.') > 1:
-    domain = domain[4:]
+      domain = domain[4:]
 
-  if args.clipboard:
-    if args.firefox:
-      to_clipboard(url)
-    else:
-      to_clipboard(domain)
-
-  if args.firefox:
-    firefox_check(domain)
+  return (urls, events, domain)
 
 
 def url_from_clipboard():
