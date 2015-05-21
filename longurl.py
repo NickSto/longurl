@@ -16,12 +16,11 @@ URL_REGEX = r'^(https?://)?([a-zA-Z0-9-]+\.)+[a-zA-Z0-9]+(/\S*)?$'
 REPUTATION_URL = 'https://www.mywot.com/en/scorecard/'
 
 OPT_DEFAULTS = {'quiet':False, 'custom_ua':False, 'max_response_read':128}
-DESCRIPTION = """Follow the chain of redirects from the starting url. This
-will print the start url, then every redirect in the chain. Can omit the
-'http://' from the url argument. If no url is given on the command line, it
-will try to use xclip to find it on the clipboard."""
-USER_AGENT_BROWSER = ('Mozilla/5.0 (Windows NT 6.1; Win64; x64; rv:32.0) '
-  'Gecko/20100101 Firefox/32.0')
+DESCRIPTION = """Follow the chain of redirects from the starting url. This will print the start url,
+then every redirect in the chain. Can omit the 'http://' from the url argument. If no url is given
+on the command line, it will try to use xclip to find it on the clipboard."""
+USER_AGENT_BROWSER = ('Mozilla/5.0 (Windows NT 6.1; Win64; x64; rv:32.0) Gecko/20100101 '
+                      'Firefox/32.0')
 USER_AGENT_CUSTOM = 'longurl.py'
 #TODO: Use good list of headers (some of these can cause problems):
 # headers = {
@@ -39,32 +38,28 @@ def main():
   parser.set_defaults(**OPT_DEFAULTS)
 
   parser.add_argument('url', metavar='http://sho.rt/url', nargs='?',
-    help='The short url. If not given, this will use xclip to search for a url '
-      'in your clipboard.')
+    help='The short url. If not given, this will use xclip to search for a url in your clipboard.')
   parser.add_argument('-q', '--quiet', action='store_true',
-    help='Suppress all output but the list of urls. The number of output lines '
-      'will be 1 + the number of redirects.')
+    help='Suppress all output but the list of urls. The number of output lines will be 1 + the '
+         'number of redirects.')
   parser.add_argument('-Q', '--very-quiet', action='store_true',
     help='Suppress all output but the final url.')
   parser.add_argument('-c', '--clipboard', action='store_true',
-    help='Copy the final domain to the clipboard (or the full url if using '
-      '--firefox).')
+    help='Copy the final domain to the clipboard (or the full url if using --firefox).')
   parser.add_argument('-p', '--percent-decode', action='store_true',
     help='Decode percent-encoded characters in the redirect URL.')
   parser.add_argument('-f', '--firefox', action='store_true',
-    help='Open Firefox at the end to a reputation-checking site (mywot.com) '
-      'for the final domain. Also, the full final url will be placed on the '
-      'clipboard instead of just the domain.')
+    help='Open Firefox at the end to a reputation-checking site (mywot.com) for the final domain. '
+         'Also, the full final url will be placed on the clipboard instead of just the domain.')
   parser.add_argument('-u', '--fake-user-agent', action='store_true',
-    help='Use a Firefox user agent string instead of the script\'s own custom '
-      'user agent ("'+USER_AGENT_CUSTOM+'"). Counterintuitively, many url '
-      'shorteners (including Twitter\'s t.co) react better to unrecognized '
-      'user agents (fewer meta refreshes). But in case some reject '
-      'unrecognized ones, you can use this to pretend to be a normal browser. '
-      'The Firefox user agent string is "'+USER_AGENT_BROWSER+'".')
+    help='Use a Firefox user agent string instead of the script\'s own custom user agent ("'
+         +USER_AGENT_CUSTOM+'"). Counterintuitively, many url shorteners (including Twitter\'s '
+         't.co) react better to unrecognized user agents (fewer meta refreshes). But in case some '
+         'reject unrecognized ones, you can use this to pretend to be a normal browser. The '
+         'Firefox user agent string is "'+USER_AGENT_BROWSER+'".')
   parser.add_argument('-m', '--max-response-read', type=int,
-    help='Maximum amount of response to download, looking for meta refreshes '
-      'in the HTML. Given in kilobytes. Default: %(default)s kb.')
+    help='Maximum amount of response to download, looking for meta refreshes in the HTML. Given in '
+         'kilobytes. Default: %(default)s kb.')
   parser.add_argument('-W', '--terminal-width', type=int,
     help='Manually tell the script the number of columns in the terminal.')
 
@@ -141,8 +136,8 @@ def main():
           # If no Location header and no meta refresh, then we're at the end
           done = True
       else:
-        fail("Error: non-200 status and no Location header. Status message:\n\t"
-              +str(response.status)+': '+response.reason)
+        fail("Error: non-200 status and no Location header. Status message:\n\t{}: {}"
+             .format(response.status, response.reason))
     conex.close()
 
     # Fix percent-encoded and relative urls
