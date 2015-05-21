@@ -15,12 +15,12 @@ SCHEME_REGEX = r'^[^?#:]+://'
 URL_REGEX = r'^(https?://)?([a-zA-Z0-9-]+\.)+[a-zA-Z0-9]+(/\S*)?$'
 REPUTATION_URL = 'https://www.mywot.com/en/scorecard/'
 
-OPT_DEFAULTS = {'quiet':False, 'custom_ua':False, 'max_response_read':128}
+OPT_DEFAULTS = {'quiet':False, 'custom_ua':False, 'max_response':128}
 DESCRIPTION = """Follow the chain of redirects from the starting url. This will print the start url,
 then every redirect in the chain. Can omit the 'http://' from the url argument. If no url is given
 on the command line, it will try to use xclip to find it on the clipboard."""
 USER_AGENT_BROWSER = ('Mozilla/5.0 (Windows NT 6.1; Win64; x64; rv:32.0) Gecko/20100101 '
-                      'Firefox/32.0')
+                      'Firefox/40.0')
 USER_AGENT_CUSTOM = 'longurl.py'
 #TODO: Use good list of headers (some of these can cause problems):
 # headers = {
@@ -57,7 +57,7 @@ def main():
          't.co) react better to unrecognized user agents (fewer meta refreshes). But in case some '
          'reject unrecognized ones, you can use this to pretend to be a normal browser. The '
          'Firefox user agent string is "'+USER_AGENT_BROWSER+'".')
-  parser.add_argument('-m', '--max-response-read', type=int,
+  parser.add_argument('-m', '--max-response', type=int,
     help='Maximum amount of response to download, looking for meta refreshes in the HTML. Given in '
          'kilobytes. Default: %(default)s kb.')
   parser.add_argument('-W', '--terminal-width', type=int,
@@ -69,9 +69,9 @@ def main():
     args.no_clipboard = True
 
   if args.fake_user_agent:
-    headers['User-Agent'] = USER_AGENT_BROWSER
+    user_agent = USER_AGENT_BROWSER
   else:
-    headers['User-Agent'] = USER_AGENT_CUSTOM
+    user_agent = USER_AGENT_CUSTOM
 
   if args.terminal_width:
     columns = args.terminal_width
@@ -91,7 +91,8 @@ def main():
     url = 'http://'+url
 
   # Do the actual redirect resolution.
-  (urls, events, domain) = follow_redirects(url)
+  (urls, events, domain) = follow_redirects(url, percent_decode=args.percent_decode,
+                                            max_response=args.max_response, user_agent=user_agent)
 
   # Print list of redirect urls.
   for url in urls:
@@ -123,10 +124,11 @@ def main():
 
 # THE MAIN LOGIC
 #TODO: Turn into generator to get real-time results.
-def follow_redirects(url, percent_decode=False, max_response_read=128):
+def follow_redirects(url, percent_decode=False, max_response=128, user_agent=USER_AGENT_CUSTOM):
   """Follow a chain of url redirects, returning a list of urls in the chain.
   Includes the input url as the first in the list. Also returns an informational list of events
   occurring during redirection and the domain of the final url."""
+  headers = {'User-Agent':user_agent}
   urls = []
   events = []
   done = False
@@ -160,7 +162,7 @@ def follow_redirects(url, percent_decode=False, max_response_read=128):
     # Check for meta refresh
     if redirect_url is None:
       if response.status == 200:
-        html = response.read(max_response_read * 1024)
+        html = response.read(max_response * 1024)
         try:
           meta_url = meta_redirect(html)
         except Exception:
