@@ -8,14 +8,15 @@ import urlparse
 import argparse
 import subprocess
 import HTMLParser
+import webbrowser
 import distutils.spawn
 
 COLUMNS_DEFAULT = 80
 SCHEME_REGEX = r'^[^?#:]+://'
 URL_REGEX = r'^(https?://)?([a-zA-Z0-9-]+\.)+[a-zA-Z0-9]+(/\S*)?$'
-REPUTATION_URL = 'https://www.mywot.com/en/scorecard/'
 
-OPT_DEFAULTS = {'quiet':False, 'custom_ua':False, 'max_response':128}
+OPT_DEFAULTS = {'quiet':False, 'custom_ua':False, 'max_response':128,
+                'reputation_url':'https://www.mywot.com/en/scorecard/'}
 DESCRIPTION = """Follow the chain of redirects from the starting url. This will print the start url,
 then every redirect in the chain. Can omit the 'http://' from the url argument. If no url is given
 on the command line, it will try to use xclip to find it on the clipboard."""
@@ -45,12 +46,15 @@ def main():
   parser.add_argument('-Q', '--very-quiet', action='store_true',
     help='Suppress all output but the final url.')
   parser.add_argument('-c', '--clipboard', action='store_true',
-    help='Copy the final domain to the clipboard (or the full url if using --firefox).')
+    help='Copy the final domain to the clipboard (or the full url if using --browser).')
   parser.add_argument('-p', '--percent-decode', action='store_true',
     help='Decode percent-encoded characters in the redirect URL.')
-  parser.add_argument('-f', '--firefox', action='store_true',
-    help='Open Firefox at the end to a reputation-checking site (mywot.com) for the final domain. '
+  parser.add_argument('-b', '--browser', action='store_true',
+    help='Open your default browser at the end to a reputation-checking site for the final domain. '
          'Also, the full final url will be placed on the clipboard instead of just the domain.')
+  parser.add_argument('-r', '--reputation-url',
+    help='The url to prepend to the domain name for checking the reputation of the domain. '
+         'Default: %(default)s')
   parser.add_argument('-u', '--fake-user-agent', action='store_true',
     help='Use a Firefox user agent string instead of the script\'s own custom user agent ("'
          +USER_AGENT_CUSTOM+'"). Counterintuitively, many url shorteners (including Twitter\'s '
@@ -114,12 +118,12 @@ def main():
 
   # Copy final data to clipboard, and open reputation checker in browser, if requested.
   if args.clipboard:
-    if args.firefox:
+    if args.browser:
       to_clipboard(urls[-1])
     else:
       to_clipboard(domain)
-  if args.firefox:
-    firefox_check(domain)
+  if args.browser:
+    webbrowser.open(args.reputation_url+domain)
 
 
 # THE MAIN LOGIC
@@ -221,17 +225,6 @@ def to_clipboard(domain):
   """Use xclip to copy the domain to the clipboard."""
   process = subprocess.Popen(['xclip', '-sel', 'clip'], stdin=subprocess.PIPE)
   process.communicate(input=domain)
-
-
-def firefox_check(domain, reputation_url=REPUTATION_URL):
-  """Use Firefox to open "reputation_url" + "domain"."""
-  if not distutils.spawn.find_executable('firefox'):
-    return None
-  devnull = open(os.devnull, 'wb')
-  try:
-    subprocess.call(['firefox', reputation_url+domain], stderr=devnull)
-  finally:
-    devnull.close()
 
 
 def meta_redirect(html):
