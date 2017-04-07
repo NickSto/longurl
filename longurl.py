@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 import re
 import os
-import sys
 import urllib
 import httplib
 import urlparse
@@ -15,7 +14,7 @@ COLUMNS_DEFAULT = 80
 SCHEME_REGEX = r'^[^?#:]+://'
 URL_REGEX = r'^(https?://)?([a-zA-Z0-9-]+\.)+[a-zA-Z0-9]+(/\S*)?$'
 
-OPT_DEFAULTS = {'quiet':False, 'custom_ua':False, 'max_response':128,
+OPT_DEFAULTS = {'quiet':False, 'custom_ua':False, 'max_response':128, 'max_redirects':200,
                 'reputation_url':'https://www.mywot.com/en/scorecard/'}
 DESCRIPTION = """Follow the chain of redirects from the starting url. This will print the start url,
 then every redirect in the chain. Can omit the 'http://' from the url argument. If no url is given
@@ -40,6 +39,8 @@ def main():
 
   parser.add_argument('url', metavar='http://sho.rt/url', nargs='?',
     help='The short url. If not given, this will use xclip to search for a url in your clipboard.')
+  parser.add_argument('-m', '--max-redirects', type=int,
+    help='Maximum number of redirects to process. Give "0" to set no limit. Default: %(default)s.')
   parser.add_argument('-q', '--quiet', action='store_true',
     help='Suppress all output but the list of urls. The number of output lines will be 1 + the '
          'number of redirects.')
@@ -61,7 +62,7 @@ def main():
          't.co) react better to unrecognized user agents (fewer meta refreshes). But in case some '
          'reject unrecognized ones, you can use this to pretend to be a normal browser. The '
          'Firefox user agent string is "'+USER_AGENT_BROWSER+'".')
-  parser.add_argument('-m', '--max-response', type=int,
+  parser.add_argument('-M', '--max-response', type=int,
     help='Maximum amount of response to download, looking for meta refreshes in the HTML. Given in '
          'kilobytes. Default: %(default)s kb.')
   parser.add_argument('-W', '--terminal-width', type=int,
@@ -95,15 +96,22 @@ def main():
     url = 'http://'+url
 
   # Do the actual redirect resolution.
-  (urls, events, domain) = follow_redirects(url, percent_decode=args.percent_decode,
-                                            max_response=args.max_response, user_agent=user_agent)
-
-  # Print list of redirect urls.
-  for url in urls:
+  events = []
+  redirects = -1
+  for url, these_events in follow_redirects(url, percent_decode=args.percent_decode,
+                                            max_response=args.max_response, user_agent=user_agent):
     if not args.very_quiet:
       print url
+    events.extend(these_events)
+    redirects += 1
+
   if args.very_quiet:
-    print urls[-1]
+    print url
+
+  # Remove starting www. from domain, if present
+  domain = urlparse.urlsplit(url)[1]
+  if domain.startswith('www.') and domain.count('.') > 1:
+      domain = domain[4:]
 
   # Print summary info.
   if not args.quiet:
@@ -114,12 +122,12 @@ def main():
         print 'absolute path from '+event['url'][:columns-19]
       elif event['type'] == 'relative':
         print 'relative path from '+event['url'][:columns-19]
-    print 'total redirects: {}'.format(len(urls)-1)
+    print 'total redirects: {}'.format(redirects)
 
   # Copy final data to clipboard, and open reputation checker in browser, if requested.
   if args.clipboard:
     if args.browser:
-      to_clipboard(urls[-1])
+      to_clipboard(url)
     else:
       to_clipboard(domain)
   if args.browser:
@@ -127,18 +135,20 @@ def main():
 
 
 # THE MAIN LOGIC
-#TODO: Turn into generator to get real-time results.
-def follow_redirects(url, percent_decode=False, max_response=128, user_agent=USER_AGENT_CUSTOM):
-  """Follow a chain of url redirects, returning a list of urls in the chain.
-  Includes the input url as the first in the list. Also returns an informational list of events
-  occurring during redirection and the domain of the final url."""
+def follow_redirects(url, percent_decode=False, max_response=128, user_agent=USER_AGENT_CUSTOM,
+                     max_redirects=200):
+  """Follow a chain of url redirects.
+  A generator which yields, for every redirect, the url, and an informational list of events
+  occurring during that redirection.
+  Includes the input url as the first returned url."""
   headers = {'User-Agent':user_agent}
-  urls = []
   events = []
-  done = False
-  while not done:
+  redirects = 0
+  while redirects < max_redirects or max_redirects == 0:
+    redirects += 1
 
-    urls.append(url)
+    yield url, events
+    events = []
 
     # parse the URL's components
     url_parsed = urlparse.urlsplit(url)
@@ -176,7 +186,7 @@ def follow_redirects(url, percent_decode=False, max_response=128, user_agent=USE
           redirect_url = meta_url
         else:
           # If no Location header and no meta refresh, then we're at the end
-          done = True
+          break
       else:
         raise URLError("Non-200 status and no Location header. Status message:\n\t{}: {}"
                        .format(response.status, response.reason))
@@ -197,12 +207,6 @@ def follow_redirects(url, percent_decode=False, max_response=128, user_agent=USE
       url = urlparse.urljoin(url, redirect_url)
     # Try to do some limited percent encoding of always-invalid characters
     url = url.replace(' ', '%20')
-
-  # Remove starting www. from domain, if present
-  if domain.startswith('www.') and domain.count('.') > 1:
-      domain = domain[4:]
-
-  return (urls, events, domain)
 
 
 def url_from_clipboard():
