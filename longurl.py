@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 import re
 import os
+import sys
+import socket
 import urllib
 import httplib
 import urlparse
@@ -168,7 +170,11 @@ def follow_redirects(url, percent_decode=False, max_response=128, user_agent=USE
     else:
       raise URLError("Unrecognized URI scheme in:\n"+url)
     # Note: both of these steps can throw exceptions
-    conex.request('GET', path, '', headers)
+    try:
+      conex.request('GET', path, '', headers)
+    except socket.gaierror:
+      sys.stderr.write('Error requesting "{}"\n'.format(url))
+      raise
     response = conex.getresponse()
 
     redirect_url = response.getheader('Location')
@@ -275,10 +281,10 @@ def get_columns(default=80):
   devnull = open(os.devnull, 'wb')
   try:
     output = subprocess.check_output(['stty', 'size'], stderr=devnull)
-  except OSError:
-    devnull.close()
+  except (OSError, subprocess.CalledProcessError):
     return default
-  devnull.close()
+  finally:
+    devnull.close()
   try:
     return int(output.split()[1])
   except ValueError:
