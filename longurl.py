@@ -45,7 +45,7 @@ def make_argparser():
   parser.add_argument('-b', '--browser', action='store_true',
     help='Open your default browser at the end to a reputation-checking site for the final domain. '
       'Also, the full final url will be placed on the clipboard instead of just the domain.')
-  parser.add_argument('-r', '--reputation-url', default='https://www.mywot.com/en/scorecard/',
+  parser.add_argument('-r', '--reputation-url', default='https://www.google.com/search?q=',
     help='The url to prepend to the domain name for checking the reputation of the domain. '
       'Default: %(default)s')
   parser.add_argument('-u', '--fake-user-agent', dest='user_agent', action='store_const',
