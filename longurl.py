@@ -221,7 +221,7 @@ def url_from_clipboard():
 
 def to_clipboard(domain):
   """Use xclip to copy the domain to the clipboard."""
-  process = subprocess.Popen(['xclip', '-sel', 'clip'], stdin=subprocess.PIPE)
+  process = subprocess.Popen(['xclip', '-sel', 'clip'], encoding='utf8', stdin=subprocess.PIPE)
   process.communicate(input=domain)
 
 
