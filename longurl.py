@@ -104,7 +104,11 @@ def main(argv):
       print(reply.location)
 
   # Remove starting www. from domain, if present
-  domain = urllib.parse.urlsplit(reply.location).netloc
+  if replies:
+    final_url = reply.location
+  else:
+    final_url = url
+  domain = urllib.parse.urlsplit(final_url).netloc
   if domain.startswith('www.') and domain.count('.') > 1:
       domain = domain[4:]
 
