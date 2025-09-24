@@ -1,13 +1,11 @@
 #!/usr/bin/env python3
 import argparse
 import collections
-import distutils.spawn
 import html.parser
 import logging
-import os
 import re
 import requests
-import socket
+import shutil
 import subprocess
 import sys
 import urllib.parse
@@ -17,7 +15,7 @@ COLUMNS_DEFAULT = 80
 SCHEME_REGEX = r'^[^?#:]+://'
 URL_REGEX = r'^(https?://)?([a-zA-Z0-9-]+\.)+[a-zA-Z0-9]+(/\S*)?$'
 USER_AGENT_BROWSER = (
-  'Mozilla/5.0 (Windows NT 10.1; Win64; x64; rv:32.0) Gecko/20100101 Firefox/73.0'
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:143.0) Gecko/20100101 Firefox/143.0'
 )
 USER_AGENT_CUSTOM = 'longurl.py'
 #TODO: Use good list of headers (some of these can cause problems):
@@ -80,7 +78,7 @@ def main(argv):
   logging.basicConfig(stream=args.log, level=args.volume, format='%(message)s')
 
   clipboard = args.clipboard
-  if not distutils.spawn.find_executable('xclip'):
+  if not shutil.which('xclip'):
     logging.warning(
       'Warning: Could not find `xclip` command. Will not be able to copy final url to clipboard.'
     )
@@ -211,7 +209,7 @@ def url_from_clipboard():
   """Use xclip to copy the short url from the clipboard.
   Checks it against a simple, broad URL regex, and returns None if no match.
   Also returns None on error executing the xclip command."""
-  if not distutils.spawn.find_executable('xclip'):
+  if not shutil.which('xclip'):
     return None
   try:
     output = subprocess.check_output(['xclip', '-o', '-sel', 'clip'], encoding='utf8')
@@ -275,7 +273,7 @@ class RefreshParser(html.parser.HTMLParser):
 def get_columns(default=80):
   """Get current terminal width, using stty command. If stty isn't available,
   or if it gives an error, return the default."""
-  if not distutils.spawn.find_executable('stty'):
+  if not shutil.which('stty'):
     return default
   try:
     output = subprocess.check_output(['stty', 'size'], stderr=subprocess.DEVNULL, encoding='utf8')
