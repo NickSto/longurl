@@ -96,9 +96,10 @@ def main(argv):
     print(url)
 
   # Do the actual redirect resolution.
-  replies = list(follow_redirects(url, max_response=args.max_response, user_agent=args.user_agent))
-  for reply_num, reply in enumerate(replies):
-    if get_loglevel() <= logging.WARNING or reply_num == len(replies)-1:
+  replies = []
+  for reply in follow_redirects(url, max_response=args.max_response, user_agent=args.user_agent):
+    replies.append(reply)
+    if get_loglevel() <= logging.WARNING:
       print(reply.location)
 
   # Remove starting www. from domain, if present
