@@ -11,9 +11,14 @@ import sys
 import urllib.parse
 import webbrowser
 
+log = logging.getLogger(__name__)
+
 COLUMNS_DEFAULT = 80
 SCHEME_REGEX = r'^[^?#:]+://'
 URL_REGEX = r'^(https?://)?([a-zA-Z0-9-]+\.)+[a-zA-Z0-9]+(/\S*)?$'
+# Default timeout (seconds) for each individual request, so a slow/unresponsive server can't hang
+# a caller forever.
+DEFAULT_TIMEOUT = 30
 USER_AGENT_BROWSER = (
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:143.0) Gecko/20100101 Firefox/143.0'
 )
@@ -141,12 +146,15 @@ Reply.__doc__ = """This represents a response from a server, focusing on its red
 `location`: The URL that the server is redirecting to.
 """
 
-def follow_redirects(url, user_agent=USER_AGENT_CUSTOM, max_redirects=200, max_response=128):
+def follow_redirects(
+    url, user_agent=USER_AGENT_CUSTOM, max_redirects=200, max_response=128, timeout=DEFAULT_TIMEOUT,
+  ):
   """Follow a chain of url redirects.
   A generator which yields one `Reply` object per redirect it receives.
   It does not yield anything for the final request, since it won't be a redirect."""
   reply_type = last_code = last_url = None
-  for resp_num, response in enumerate(get_responses(url, user_agent, max_redirects, max_response)):
+  response_generator = get_responses(url, user_agent, max_redirects, max_response, timeout)
+  for resp_num, response in enumerate(response_generator):
     if resp_num > 0:
       # Finish processing the previous reply and yield it.
       if reply_type is None:
@@ -163,16 +171,16 @@ def follow_redirects(url, user_agent=USER_AGENT_CUSTOM, max_redirects=200, max_r
     last_code = response.status_code
 
 
-def get_responses(url, user_agent, max_redirects, max_response):
+def get_responses(url, user_agent, max_redirects, max_response, timeout=DEFAULT_TIMEOUT):
   headers = {'User-Agent':user_agent}
   num_redirects = 0
   while num_redirects < max_redirects or max_redirects == 0:
     num_redirects += 1
     # Make request.
     try:
-      final_response = requests.get(url, headers=headers)
+      final_response = requests.get(url, headers=headers, timeout=timeout)
     except requests.exceptions.RequestException:
-      logging.critical(f'Error requesting {url!r}')
+      log.critical(f'Error requesting {url!r}')
       raise
     # Yield all urls in the redirect chain that `requests` was able to follow.
     for response in final_response.history:
@@ -233,7 +241,7 @@ def get_meta_redirect(response, max_response):
   try:
     meta_url = parse_meta_redirect(html)
   except Exception as error:
-    logging.error(f'Error parsing HTML: {error}')
+    log.error(f'Error parsing HTML: {error}')
     meta_url = None
   return meta_url
 
@@ -293,7 +301,7 @@ def get_loglevel():
 class URLError(Exception):
   def __init__(self, message=None):
     if message:
-      super().__init__(self, message)
+      super().__init__(message)
 
 
 if __name__ == "__main__":
