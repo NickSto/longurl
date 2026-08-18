@@ -105,17 +105,14 @@ def main(argv):
 
   # Do the actual redirect resolution.
   if args.single:
-    reply = get_next_redirect(url, user_agent=args.user_agent, max_response=args.max_response)
-    replies = [reply]
-    if reply.location:
-      if get_loglevel() <= logging.WARNING:
-        print(reply.location)
+    reply_iter = [get_next_redirect(url, user_agent=args.user_agent, max_response=args.max_response)]
   else:
-    replies = []
-    for reply in follow_redirects(url, max_response=args.max_response, user_agent=args.user_agent):
-      replies.append(reply)
-      if get_loglevel() <= logging.WARNING:
-        print(reply.location)
+    reply_iter = follow_redirects(url, max_response=args.max_response, user_agent=args.user_agent)
+  replies = []
+  for reply in reply_iter:
+    replies.append(reply)
+    if get_loglevel() <= logging.WARNING:
+      print(reply.location)
 
   # Remove starting www. from domain, if present
   if replies:
