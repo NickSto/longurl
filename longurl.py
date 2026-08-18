@@ -41,8 +41,11 @@ def make_argparser():
   parser = argparse.ArgumentParser(description=DESCRIPTION)
   parser.add_argument('url', metavar='http://sho.rt/url', nargs='?', default=url_from_clipboard(),
     help='The short url. If not given, this will use xclip to search for a url in your clipboard.')
+  parser.add_argument('-s', '--single', action='store_true',
+    help='Only follow a single redirect, instead of the whole chain.')
   parser.add_argument('-m', '--max-redirects', type=int, default=200,
-    help='Maximum number of redirects to process. Give "0" to set no limit. Default: %(default)s.')
+    help="Maximum number of redirect chains to process. A redirect chain is a series of responses "
+      'with a `Location:` header. Give "0" to set no limit. Default: %(default)s.')
   parser.add_argument('-c', '--clipboard', action='store_true',
     help='Copy the final domain to the clipboard (or the full url if using --browser).')
   parser.add_argument('-b', '--browser', action='store_true',
@@ -101,11 +104,18 @@ def main(argv):
     print(url)
 
   # Do the actual redirect resolution.
-  replies = []
-  for reply in follow_redirects(url, max_response=args.max_response, user_agent=args.user_agent):
-    replies.append(reply)
-    if get_loglevel() <= logging.WARNING:
-      print(reply.location)
+  if args.single:
+    reply = get_next_redirect(url, user_agent=args.user_agent, max_response=args.max_response)
+    replies = [reply]
+    if reply.location:
+      if get_loglevel() <= logging.WARNING:
+        print(reply.location)
+  else:
+    replies = []
+    for reply in follow_redirects(url, max_response=args.max_response, user_agent=args.user_agent):
+      replies.append(reply)
+      if get_loglevel() <= logging.WARNING:
+        print(reply.location)
 
   # Remove starting www. from domain, if present
   if replies:
@@ -150,8 +160,10 @@ def follow_redirects(
     url, user_agent=USER_AGENT_CUSTOM, max_redirects=200, max_response=128, timeout=DEFAULT_TIMEOUT,
   ):
   """Follow a chain of url redirects.
-  A generator which yields one `Reply` object per redirect it receives.
-  It does not yield anything for the final request, since it won't be a redirect."""
+  This is a generator which yields one `Reply` object per redirect it receives.
+  It does not yield anything for the final request, since it won't be a redirect.
+  This uses `requests`' automatic redirect following feature to follow `Location:` headers, and our
+  own parsing to handle redirects from `<meta http-equiv="refresh">` tags in HTML."""
   reply_type = last_code = last_url = None
   response_generator = get_responses(url, user_agent, max_redirects, max_response, timeout)
   for resp_num, response in enumerate(response_generator):
@@ -171,23 +183,61 @@ def follow_redirects(
     last_code = response.status_code
 
 
+def get_next_redirect(url, user_agent=USER_AGENT_CUSTOM, max_response=128, timeout=DEFAULT_TIMEOUT):
+  """Make a single request to `url` and report where (if anywhere) it redirects to next.
+  Unlike `follow_redirects()`, this doesn't automatically continue on to the next url. That lets a
+  caller inspect (and potentially edit) the url in between each step of the chain.
+  Returns a `Reply`. `reply.location` is `None` if the response wasn't a redirect (a final page)."""
+  # It may seem like this could be deduped with `follow_redirects()` or `get_responses()`, but it
+  # can't, due to the use of `requests`' automatic redirect-following feature. This function is the
+  # equivalent `Reply`-generating counterpart of `follow_redirects()`, but the latter uses
+  # `requests`' ability to automatically follow redirects, which also allows us to use its parsing
+  # of `Location:` headers. Instead, here, we have to do that ourselves (see the `urljoin` call).
+  # Using this feature of `requests` does require a special function (`follow_redirects()`) to join
+  # the `requests.url` of the previous response with the data from the current one in order to
+  # create each `Reply`. We actually could just stop processing the `Reply`s from
+  # `follow_redirects()` after the first one, but we'd still end up following the redirect chain in
+  # the background, and one reason for the single-step feature is to prevent making requests to urls
+  # that the user doesn't want to touch.
+  response = get_response(url, user_agent, allow_redirects=False, timeout=timeout)
+  location = get_location(response)
+  if location:
+    reply_type = url_type(location)
+    # `requests` doesn't resolve the Location header for us, since we disabled redirect-following.
+    location = urllib.parse.urljoin(response.url, location)
+  elif response.status_code == 200:
+    meta_url = get_meta_redirect(response, max_response)
+    if meta_url:
+      reply_type = 'refresh'
+      location = urllib.parse.urljoin(response.url, meta_url)
+    else:
+      reply_type = None
+      location = None
+  else:
+    reply_type = None
+    location = None
+  return Reply(url=response.url, type=reply_type, code=response.status_code, location=location)
+
+
 def get_responses(url, user_agent, max_redirects, max_response, timeout=DEFAULT_TIMEOUT):
-  headers = {'User-Agent':user_agent}
+  """Follow all redirects from `url`, yielding each `requests.Response` object in the chain."""
   num_redirects = 0
   while num_redirects < max_redirects or max_redirects == 0:
     num_redirects += 1
     # Make request.
-    try:
-      final_response = requests.get(url, headers=headers, timeout=timeout)
-    except requests.exceptions.RequestException:
-      log.critical(f'Error requesting {url!r}')
-      raise
+    final_response = get_response(url, user_agent, allow_redirects=True, timeout=timeout)
     # Yield all urls in the redirect chain that `requests` was able to follow.
     for response in final_response.history:
       yield response
     # Check for meta refreshes.
     if final_response.status_code == 200:
-      url = get_meta_redirect(final_response, max_response)
+      meta_url = get_meta_redirect(final_response, max_response)
+      if meta_url:
+        # The url in a meta refresh can be relative, unlike a `Location:` header, which `requests`
+        # would have already resolved for us if this were one.
+        url = urllib.parse.urljoin(final_response.url, meta_url)
+      else:
+        url = None
     else:
       raise URLError(
         f'Non-200 status and no Location header. Status message:\n\t{final_response.status_code}: '
@@ -196,6 +246,15 @@ def get_responses(url, user_agent, max_redirects, max_response, timeout=DEFAULT_
     yield final_response
     if not url:
       break
+
+
+def get_response(url, user_agent, allow_redirects=True, timeout=DEFAULT_TIMEOUT):
+  headers = {'User-Agent':user_agent}
+  try:
+    return requests.get(url, headers=headers, allow_redirects=allow_redirects, timeout=timeout)
+  except requests.exceptions.RequestException:
+    log.critical(f'Error requesting {url!r}')
+    raise
 
 
 def get_location(response):
